@@ -1,4 +1,5 @@
 postgresql:
+  fullnameOverride: postgresql
   image:
     registry: docker.io
     repository: bitnamilegacy/postgresql
@@ -83,7 +84,7 @@ keycloak:
   postgresql:
     enabled: false
   externalDatabase:
-    host: vinculum-infra-postgresql
+    host: postgresql
     port: 5432
     user: keycloak
     password: keycloak
@@ -122,7 +123,7 @@ forgejo:
       APP_NAME: Vinculum Code
       database:
         DB_TYPE: postgres
-        HOST: vinculum-infra-postgresql:5432
+        HOST: postgresql:5432
         NAME: vinculum
         USER: forgejo
         SCHEMA: forgejo
