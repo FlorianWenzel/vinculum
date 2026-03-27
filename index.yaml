@@ -1,0 +1,66 @@
+apiVersion: v1
+entries:
+  drone:
+  - apiVersion: v2
+    appVersion: 0.2.0
+    created: "2026-03-27T20:31:19.529232852Z"
+    description: Parameterized Vinculum drone runtime
+    digest: cd4baf6e3aaa18591c434358620788a3133d9f031b163c9a89b9f1a2b3fc2dc9
+    name: drone
+    type: application
+    urls:
+    - https://florianwenzel.github.io/vinculum/drone-0.2.0.tgz
+    version: 0.2.0
+  infrastructure:
+  - apiVersion: v2
+    appVersion: 0.2.0
+    created: "2026-03-27T20:31:19.558524991Z"
+    dependencies:
+    - name: postgresql
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 16.7.26
+    - name: keycloak
+      repository: https://charts.bitnami.com/bitnami
+      version: 25.2.0
+    - name: forgejo
+      repository: oci://code.forgejo.org/forgejo-helm
+      version: 16.2.1
+    description: Local infrastructure dependencies for Vinculum
+    digest: f34f9074279cb2c6f2fe7cc8c705fe67abbe6bc6f4ccabb2b82f8815fa25ab5d
+    name: infrastructure
+    type: application
+    urls:
+    - https://florianwenzel.github.io/vinculum/infrastructure-0.2.0.tgz
+    version: 0.2.0
+  orchestrator:
+  - apiVersion: v2
+    appVersion: 0.2.0
+    created: "2026-03-27T20:31:19.558837212Z"
+    description: Vinculum Kubernetes operator for Drone and TaskRun resources
+    digest: cf3b7932bca0c68d287e3ec8db0845a73827ba36f6efb20d8f2fd83f28daa3e3
+    name: orchestrator
+    type: application
+    urls:
+    - https://florianwenzel.github.io/vinculum/orchestrator-0.2.0.tgz
+    version: 0.2.0
+  vinculum:
+  - apiVersion: v2
+    appVersion: 0.2.0
+    created: "2026-03-27T20:31:19.580425144Z"
+    dependencies:
+    - condition: infrastructure.enabled
+      name: infrastructure
+      repository: file://../infrastructure
+      version: 0.2.0
+    - condition: orchestrator.enabled
+      name: orchestrator
+      repository: file://../orchestrator
+      version: 0.2.0
+    description: Vinculum application services
+    digest: 0470a05966dfe71dd2588ad6f1b29ce8e1903e29dcd91168997ddb25150893b3
+    name: vinculum
+    type: application
+    urls:
+    - https://florianwenzel.github.io/vinculum/vinculum-0.2.0.tgz
+    version: 0.2.0
+generated: "2026-03-27T20:31:19.528469743Z"
