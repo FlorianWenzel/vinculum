@@ -3,9 +3,9 @@ entries:
   drone:
   - apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-03-27T20:31:19.529232852Z"
+    created: "2026-03-27T21:22:20.397153549Z"
     description: Parameterized Vinculum drone runtime
-    digest: cd4baf6e3aaa18591c434358620788a3133d9f031b163c9a89b9f1a2b3fc2dc9
+    digest: 0091c4deddb03b4e278a822297e123fe2130d96e171a3b37f61ed03617c3b29a
     name: drone
     type: application
     urls:
@@ -14,7 +14,7 @@ entries:
   infrastructure:
   - apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-03-27T20:31:19.558524991Z"
+    created: "2026-03-27T21:22:20.418657861Z"
     dependencies:
     - name: postgresql
       repository: oci://registry-1.docker.io/bitnamicharts
@@ -26,7 +26,7 @@ entries:
       repository: oci://code.forgejo.org/forgejo-helm
       version: 16.2.1
     description: Local infrastructure dependencies for Vinculum
-    digest: f34f9074279cb2c6f2fe7cc8c705fe67abbe6bc6f4ccabb2b82f8815fa25ab5d
+    digest: fd774b059fa977c0030614506db1a5a91048659c667e3c8bc712d9a433bb53ed
     name: infrastructure
     type: application
     urls:
@@ -35,9 +35,9 @@ entries:
   orchestrator:
   - apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-03-27T20:31:19.558837212Z"
+    created: "2026-03-27T21:22:20.418930922Z"
     description: Vinculum Kubernetes operator for Drone and TaskRun resources
-    digest: cf3b7932bca0c68d287e3ec8db0845a73827ba36f6efb20d8f2fd83f28daa3e3
+    digest: 18f0f362469a23997ddc11d64147069c725f59096a3cfb185d4f82816f670d38
     name: orchestrator
     type: application
     urls:
@@ -46,7 +46,7 @@ entries:
   vinculum:
   - apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-03-27T20:31:19.580425144Z"
+    created: "2026-03-27T21:22:20.441045723Z"
     dependencies:
     - condition: infrastructure.enabled
       name: infrastructure
@@ -57,10 +57,10 @@ entries:
       repository: file://../orchestrator
       version: 0.2.0
     description: Vinculum application services
-    digest: 0470a05966dfe71dd2588ad6f1b29ce8e1903e29dcd91168997ddb25150893b3
+    digest: c90edf3eb629247e053a1f5197d0c0ec39ac8104e65d080a7ea7a156af1c536c
     name: vinculum
     type: application
     urls:
     - https://florianwenzel.github.io/vinculum/vinculum-0.2.0.tgz
     version: 0.2.0
-generated: "2026-03-27T20:31:19.528469743Z"
+generated: "2026-03-27T21:22:20.396759337Z"
