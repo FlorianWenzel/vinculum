@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vinculum.infra.name" . }}
+  labels:
+    helm.sh/chart: {{ include "vinculum.chart" . }}
+    app.kubernetes.io/name: {{ include "vinculum.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.vinculumInfra.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "vinculum.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: vinculum-infra
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "vinculum.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: vinculum-infra
+    spec:
+      serviceAccountName: {{ include "vinculum.infra.name" . }}
+      containers:
+        - name: vinculum-infra
+          image: "{{ .Values.vinculumInfra.image.repository }}:{{ default .Chart.AppVersion .Values.vinculumInfra.image.tag }}"
+          imagePullPolicy: {{ .Values.vinculumInfra.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          env:
+            - name: SERVER_ADDR
+              value: {{ .Values.vinculumInfra.env.serverAddr | quote }}
+            - name: AUTO_BOOTSTRAP
+              value: {{ ternary "true" "false" .Values.vinculumInfra.env.autoBootstrap | quote }}
+            - name: KEYCLOAK_BASE_URL
+              value: {{ include "vinculum.keycloakBaseURL" . | quote }}
+            - name: KEYCLOAK_ISSUER_URL
+              value: {{ include "vinculum.keycloakIssuerURL" . | quote }}
+            - name: KEYCLOAK_ADMIN_REALM
+              value: {{ .Values.vinculumInfra.env.keycloakAdminRealm | quote }}
+            - name: KEYCLOAK_REALM
+              value: {{ .Values.vinculumInfra.env.keycloakRealm | quote }}
+            - name: KEYCLOAK_FORGEJO_CLIENT_ID
+              value: {{ .Values.vinculumInfra.env.keycloakForgejoClientID | quote }}
+            - name: KEYCLOAK_FORGEJO_REDIRECT_URIS
+              value: {{ include "vinculum.keycloakForgejoRedirectURIs" . | quote }}
+            - name: KEYCLOAK_FORGEJO_WEB_ORIGINS
+              value: {{ include "vinculum.keycloakForgejoWebOrigins" . | quote }}
+            - name: FORGEJO_BASE_URL
+              value: {{ include "vinculum.forgejoBaseURL" . | quote }}
+            - name: FORGEJO_PUBLIC_URL
+              value: {{ include "vinculum.forgejoPublicURL" . | quote }}
+            - name: FORGEJO_ORG_NAME
+              value: {{ .Values.vinculumInfra.env.forgejoOrgName | quote }}
+            - name: FORGEJO_ORG_VISIBILITY
+              value: {{ .Values.vinculumInfra.env.forgejoOrgVisibility | quote }}
+            - name: FORGEJO_AUTH_SOURCE_NAME
+              value: {{ .Values.vinculumInfra.env.forgejoAuthSourceName | quote }}
+            - name: FORGEJO_POD_NAMESPACE
+              value: {{ include "vinculum.forgejoPodNamespace" . | quote }}
+            - name: FORGEJO_POD_LABEL_SELECTOR
+              value: {{ include "vinculum.forgejoPodLabelSelector" . | quote }}
+            - name: KEYCLOAK_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vinculum.infra.name" . }}
+                  key: KEYCLOAK_ADMIN_USERNAME
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vinculum.infra.name" . }}
+                  key: KEYCLOAK_ADMIN_PASSWORD
+            - name: FORGEJO_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vinculum.infra.name" . }}
+                  key: FORGEJO_ADMIN_USERNAME
+            - name: FORGEJO_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vinculum.infra.name" . }}
+                  key: FORGEJO_ADMIN_PASSWORD
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources: {}

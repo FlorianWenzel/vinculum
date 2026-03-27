@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-orchestrator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: orchestrator
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: orchestrator
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-orchestrator
+      containers:
+        - name: orchestrator
+          image: "{{ .Values.orchestrator.image.repository }}:{{ default .Chart.AppVersion .Values.orchestrator.image.tag }}"
+          imagePullPolicy: {{ .Values.orchestrator.image.pullPolicy }}
+          env:
+            - name: WATCH_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: FORGEJO_BASE_URL
+              value: {{ default (printf "http://%s-forgejo-http.%s.svc.cluster.local:3000" .Release.Name .Release.Namespace) .Values.orchestrator.forgejo.baseURL | quote }}
+            - name: FORGEJO_SSH_HOST
+              value: {{ default (printf "%s-forgejo-ssh.%s.svc.cluster.local" .Release.Name .Release.Namespace) .Values.orchestrator.forgejo.sshHost | quote }}
+            - name: FORGEJO_SSH_PORT
+              value: {{ .Values.orchestrator.forgejo.sshPort | quote }}
+            - name: FORGEJO_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-forgejo-admin" .Release.Name }}
+                  key: username
+            - name: FORGEJO_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-forgejo-admin" .Release.Name }}
+                  key: password
+            - name: DRONE_DEFAULT_IMAGE
+              value: {{ printf "%s:%s" .Values.orchestrator.defaultDroneImage.repository (default .Chart.AppVersion .Values.orchestrator.defaultDroneImage.tag) | quote }}
+            - name: ORCHESTRATOR_WEBHOOK_URL
+              value: {{ printf "http://%s-orchestrator.%s.svc.cluster.local:8084/api/webhooks/forgejo" .Release.Name .Release.Namespace | quote }}
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 250m
+              memory: 1Gi
+          ports:
+            - containerPort: 8082
+              name: metrics
+            - containerPort: 8084
+              name: api
+            - containerPort: 8083
+              name: probes
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: probes
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: probes

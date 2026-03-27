@@ -1,0 +1,12 @@
+dependencies:
+- name: postgresql
+  repository: oci://registry-1.docker.io/bitnamicharts
+  version: 16.7.26
+- name: keycloak
+  repository: https://charts.bitnami.com/bitnami
+  version: 25.2.0
+- name: forgejo
+  repository: oci://code.forgejo.org/forgejo-helm
+  version: 16.2.1
+digest: sha256:6ed31324ecba815ba8284988f25d2a83eb3a70e8b3e125dd2f3585cbb7cb714f
+generated: "2026-03-25T13:26:46.702683+01:00"

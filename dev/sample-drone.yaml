@@ -1,0 +1,36 @@
+apiVersion: vinculum.dev/v1alpha1
+kind: Drone
+metadata:
+  name: sample-coder
+  namespace: vinculum-system
+spec:
+  role: coder
+  forgejoUsername: sample-coder-bot
+  forgejo:
+    autoProvision: true
+    email: sample-coder-bot@vinculum.local
+    displayName: Sample Coder Bot
+    admin: false
+  image: ghcr.io/florianwenzel/vinculum-agent:dev
+  concurrency: 1
+  model: opencode/minimax-m2.5-free
+  instructionInline:
+    fileName: AGENT.md
+    content: |
+      # Sample Drone Instructions
+
+      You are a Vinculum coder drone running inside Kubernetes.
+      - Keep edits minimal and verify results.
+      - If no repository is present, you may create small files in `/workspace`.
+      - Report useful final output in the terminal response.
+  instructionMountPath: /instructions
+  providerAuthInline:
+    fileKey: auth.json
+    content: |
+      {
+        "opencode": {
+          "type": "api",
+          "key": "sk-RGEMXW9w1gOxxVSCpgUY7npVmtneOKB2xxmvqETnsJdbo1FHwcSUCETOeUkqYWQG"
+        }
+      }
+  enabled: true

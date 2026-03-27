@@ -1,0 +1,17 @@
+apiVersion: vinculum.dev/v1alpha1
+kind: TaskRun
+metadata:
+  name: sample-taskrun
+  namespace: vinculum-system
+spec:
+  droneRef: sample-coder
+  repositoryRef: hive-sandbox
+  role: coder
+  prompt: >-
+    Clone the repository over HTTPS into /workspace/repo using the credentials from FORGEJO_USERNAME and FORGEJO_TOKEN.
+    Use the host http://vinculum-infra-forgejo-http.vinculum-system.svc.cluster.local:3000 and repository vinculum/hive-sandbox.git.
+    Configure git user.name to picard and git user.email to picard@vinculum.local.
+    Create or overwrite RESULT.md with a short heading and one sentence saying the Vinculum drone runtime executed successfully on the zora cluster.
+    Commit the change to the default branch and push it back to origin.
+    Then print the contents of RESULT.md.
+  instructions: true

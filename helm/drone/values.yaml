@@ -1,0 +1,31 @@
+drone:
+  replicaCount: 1
+  role: coder
+  image:
+    repository: ghcr.io/florianwenzel/vinculum-agent
+    tag: ""
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8090
+  workDir: /workspace
+  instructionsDir: /instructions
+  opencode:
+    host: 127.0.0.1
+    port: 4096
+    model: ""
+    agent: ""
+    logLevel: INFO
+  ssh:
+    secretName: ""
+  providerAuth:
+    secretName: ""
+    authFileKey: auth.json
+  env: {}
+  instructions:
+    enabled: true
+    files:
+      AGENT.md: |
+        # Vinculum Drone
+
+        You are a Vinculum drone. Follow orchestrator instructions exactly, prefer small verified changes, and report useful command output back through the control API.

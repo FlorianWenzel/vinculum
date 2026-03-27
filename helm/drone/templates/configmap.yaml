@@ -1,0 +1,13 @@
+{{- if .Values.drone.instructions.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "drone.fullname" . }}-instructions
+  labels:
+    {{- include "drone.labels" . | nindent 4 }}
+data:
+{{- range $name, $content := .Values.drone.instructions.files }}
+  {{ $name }}: |
+{{ $content | nindent 4 }}
+{{- end }}
+{{- end }}

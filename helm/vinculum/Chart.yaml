@@ -1,0 +1,16 @@
+apiVersion: v2
+name: vinculum
+description: Vinculum application services
+type: application
+version: 0.2.0
+appVersion: 0.2.0
+
+dependencies:
+  - name: infrastructure
+    version: 0.2.0
+    repository: file://../infrastructure
+    condition: infrastructure.enabled
+  - name: orchestrator
+    version: 0.2.0
+    repository: file://../orchestrator
+    condition: orchestrator.enabled

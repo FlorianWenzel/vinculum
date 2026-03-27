@@ -1,0 +1,149 @@
+postgresql:
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/postgresql
+  auth:
+    enablePostgresUser: true
+    postgresPassword: postgres
+  primary:
+    persistence:
+      size: 8Gi
+    initdb:
+      scripts:
+        01-vinculum-bootstrap.sql: |
+          CREATE DATABASE vinculum;
+          \connect vinculum
+
+          CREATE ROLE keycloak LOGIN PASSWORD 'keycloak';
+          CREATE ROLE forgejo LOGIN PASSWORD 'forgejo';
+
+          CREATE SCHEMA AUTHORIZATION keycloak;
+          CREATE SCHEMA AUTHORIZATION forgejo;
+
+          ALTER ROLE keycloak IN DATABASE vinculum SET search_path TO keycloak, public;
+          ALTER ROLE forgejo IN DATABASE vinculum SET search_path TO forgejo, public;
+
+          GRANT CONNECT ON DATABASE vinculum TO keycloak;
+          GRANT CONNECT ON DATABASE vinculum TO forgejo;
+          GRANT USAGE, CREATE ON SCHEMA keycloak TO keycloak;
+          GRANT USAGE, CREATE ON SCHEMA forgejo TO forgejo;
+          ALTER DEFAULT PRIVILEGES FOR USER keycloak IN SCHEMA keycloak GRANT ALL ON TABLES TO keycloak;
+          ALTER DEFAULT PRIVILEGES FOR USER keycloak IN SCHEMA keycloak GRANT ALL ON SEQUENCES TO keycloak;
+          ALTER DEFAULT PRIVILEGES FOR USER forgejo IN SCHEMA forgejo GRANT ALL ON TABLES TO forgejo;
+          ALTER DEFAULT PRIVILEGES FOR USER forgejo IN SCHEMA forgejo GRANT ALL ON SEQUENCES TO forgejo;
+
+keycloak:
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/keycloak
+  extraVolumes:
+    - name: vinculum-theme
+      configMap:
+        name: vinculum-keycloak-theme
+  initContainers:
+    - name: install-vinculum-theme
+      image: docker.io/bitnamilegacy/keycloak:26.3.3-debian-12-r0
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/bash
+      args:
+        - -ec
+        - |
+          mkdir -p /theme-dest/vinculum/login/resources/css /theme-dest/vinculum/login/resources/img /theme-dest/vinculum/login/messages
+          cp /theme-src/theme.properties /theme-dest/vinculum/login/theme.properties
+          cp /theme-src/messages_en.properties /theme-dest/vinculum/login/messages/messages_en.properties
+          cp /theme-src/vinculum.css /theme-dest/vinculum/login/resources/css/vinculum.css
+          cp /theme-src/logo.png /theme-dest/vinculum/login/resources/img/logo.png
+          cp /theme-src/circuit-placeholder.svg /theme-dest/vinculum/login/resources/img/circuit-placeholder.svg
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        privileged: false
+        readOnlyRootFilesystem: true
+        runAsGroup: 1001
+        runAsNonRoot: true
+        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      volumeMounts:
+        - name: vinculum-theme
+          mountPath: /theme-src
+        - name: empty-dir
+          mountPath: /theme-dest
+          subPath: app-themes-dir
+  auth:
+    adminUser: admin
+    adminPassword: admin
+  production: false
+  httpEnabled: true
+  proxyHeaders: xforwarded
+  resourcesPreset: none
+  postgresql:
+    enabled: false
+  externalDatabase:
+    host: vinculum-infra-postgresql
+    port: 5432
+    user: keycloak
+    password: keycloak
+    database: vinculum
+    schema: keycloak
+
+forgejo:
+  extraVolumes:
+    - name: vinculum-forgejo-branding
+      configMap:
+        name: vinculum-forgejo-branding
+  extraInitVolumeMounts:
+    - name: vinculum-forgejo-branding
+      mountPath: /vinculum-branding
+  initPreScript: |
+    mkdir -p /data/gitea/public/assets/img /data/gitea/public/assets/css /data/gitea/templates/base
+    cp /vinculum-branding/logo.svg /data/gitea/public/assets/img/logo.svg
+    cp /vinculum-branding/favicon.svg /data/gitea/public/assets/img/favicon.svg
+    cp /vinculum-branding/logo.png /data/gitea/public/assets/img/logo.png
+    cp /vinculum-branding/logo.png /data/gitea/public/assets/img/favicon.png
+    cp /vinculum-branding/theme-vinculum-assimilated.css /data/gitea/public/assets/css/theme-vinculum-assimilated.css
+    cp /vinculum-branding/footer_content.tmpl /data/gitea/templates/base/footer_content.tmpl
+    cp /vinculum-branding/home.tmpl /data/gitea/templates/home.tmpl
+    chown -R git:git /data/gitea/public /data/gitea/templates
+  persistence:
+    size: 5Gi
+  gitea:
+    admin:
+      username: vinculum
+      password: vinculum
+      email: admin@vinculum.local
+    additionalConfigFromEnvs:
+      - name: FORGEJO__DATABASE__PASSWD
+        value: forgejo
+    config:
+      APP_NAME: Vinculum Code
+      database:
+        DB_TYPE: postgres
+        HOST: vinculum-infra-postgresql:5432
+        NAME: vinculum
+        USER: forgejo
+        SCHEMA: forgejo
+      server:
+        DOMAIN: localhost
+        ROOT_URL: http://localhost:3000/
+        SSH_DOMAIN: localhost
+        SSH_PORT: 2222
+      ui:
+        DEFAULT_THEME: vinculum-assimilated
+        DEFAULT_SHOW_FULL_NAME: true
+        SHOW_FOOTER_POWERED_BY: false
+        SHOW_FOOTER_VERSION: false
+        THEMES: forgejo-auto,forgejo-light,forgejo-dark,vinculum-assimilated
+      service:
+        REQUIRE_SIGNIN_VIEW: true
+        ALLOW_ONLY_EXTERNAL_REGISTRATION: true
+        DISABLE_REGISTRATION: false
+        ENABLE_BASIC_AUTHENTICATION: true
+        ENABLE_INTERNAL_SIGNIN: false
+        SHOW_REGISTRATION_BUTTON: false
+      openid:
+        ENABLE_OPENID_SIGNIN: false
+        ENABLE_OPENID_SIGNUP: false

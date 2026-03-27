@@ -1,0 +1,62 @@
+name: Publish Helm Charts
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'helm/**'
+      - '.github/workflows/publish-charts.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute chart repository URL
+        run: |
+          echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+          echo "repo_name=${GITHUB_REPOSITORY#*/}" >> "$GITHUB_ENV"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Build infrastructure dependencies
+        run: helm dependency build helm/infrastructure
+
+      - name: Build umbrella dependencies with vendored subcharts
+        run: helm dependency build helm/vinculum
+
+      - name: Log in to GHCR Helm registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Package charts
+        run: |
+          mkdir -p chart-repo
+          helm package helm/infrastructure --destination chart-repo
+          helm package helm/orchestrator --destination chart-repo
+          helm package helm/drone --destination chart-repo
+          helm package helm/vinculum --destination chart-repo
+          helm repo index chart-repo --url "https://${owner_lc}.github.io/${repo_name}"
+
+      - name: Publish OCI charts to GHCR
+        run: |
+          helm push chart-repo/infrastructure-*.tgz oci://ghcr.io/${owner_lc}/helm
+          helm push chart-repo/orchestrator-*.tgz oci://ghcr.io/${owner_lc}/helm
+          helm push chart-repo/drone-*.tgz oci://ghcr.io/${owner_lc}/helm
+          helm push chart-repo/vinculum-*.tgz oci://ghcr.io/${owner_lc}/helm
+
+      - name: Publish chart repository
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: chart-repo

@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "drone.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "drone.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" }}
+    vinculum.dev/role: {{ .Values.drone.role | quote }}
+spec:
+  replicas: {{ .Values.drone.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "drone.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "drone.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        vinculum.dev/role: {{ .Values.drone.role | quote }}
+    spec:
+      containers:
+        - name: drone
+          image: "{{ .Values.drone.image.repository }}:{{ default .Chart.AppVersion .Values.drone.image.tag }}"
+          imagePullPolicy: {{ .Values.drone.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8090
+          env:
+            - name: SERVER_ADDR
+              value: :8090
+            - name: WORK_DIR
+              value: {{ .Values.drone.workDir | quote }}
+            - name: INSTRUCTIONS_DIR
+              value: {{ .Values.drone.instructionsDir | quote }}
+            - name: OPENCODE_HOST
+              value: {{ .Values.drone.opencode.host | quote }}
+            - name: OPENCODE_PORT
+              value: {{ .Values.drone.opencode.port | quote }}
+            - name: OPENCODE_MODEL
+              value: {{ .Values.drone.opencode.model | quote }}
+            - name: OPENCODE_AGENT
+              value: {{ .Values.drone.opencode.agent | quote }}
+            - name: OPENCODE_LOG_LEVEL
+              value: {{ .Values.drone.opencode.logLevel | quote }}
+{{- range $key, $value := .Values.drone.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+{{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          volumeMounts:
+            - name: workspace
+              mountPath: {{ .Values.drone.workDir | quote }}
+{{- if .Values.drone.instructions.enabled }}
+            - name: instructions
+              mountPath: {{ .Values.drone.instructionsDir | quote }}
+              readOnly: true
+{{- end }}
+{{- if .Values.drone.ssh.secretName }}
+            - name: ssh
+              mountPath: /home/agent/.ssh
+              readOnly: true
+{{- end }}
+{{- if .Values.drone.providerAuth.secretName }}
+            - name: provider-auth
+              mountPath: /home/agent/.local/share/opencode/auth.json
+              subPath: {{ .Values.drone.providerAuth.authFileKey }}
+              readOnly: true
+{{- end }}
+      volumes:
+        - name: workspace
+          emptyDir: {}
+{{- if .Values.drone.instructions.enabled }}
+        - name: instructions
+          configMap:
+            name: {{ include "drone.fullname" . }}-instructions
+{{- end }}
+{{- if .Values.drone.ssh.secretName }}
+        - name: ssh
+          secret:
+            secretName: {{ .Values.drone.ssh.secretName }}
+{{- end }}
+{{- if .Values.drone.providerAuth.secretName }}
+        - name: provider-auth
+          secret:
+            secretName: {{ .Values.drone.providerAuth.secretName }}
+{{- end }}

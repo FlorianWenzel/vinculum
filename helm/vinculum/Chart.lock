@@ -1,0 +1,9 @@
+dependencies:
+- name: infrastructure
+  repository: file://../infrastructure
+  version: 0.2.0
+- name: orchestrator
+  repository: file://../orchestrator
+  version: 0.2.0
+digest: sha256:b1ef993f88294600d35c5a7cf7adeee8c82c09ef6ed259c3bd44fa0380c5cad8
+generated: "2026-03-27T21:10:10.920259+01:00"

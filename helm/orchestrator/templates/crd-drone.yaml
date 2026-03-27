@@ -1,0 +1,106 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: drones.vinculum.dev
+spec:
+  group: vinculum.dev
+  scope: Namespaced
+  names:
+    plural: drones
+    singular: drone
+    kind: Drone
+    shortNames: [drn]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Role
+          type: string
+          jsonPath: .spec.role
+        - name: Forgejo User
+          type: string
+          jsonPath: .spec.forgejoUsername
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Active
+          type: integer
+          jsonPath: .status.activeTasks
+        - name: Model
+          type: string
+          jsonPath: .spec.model
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                role: {type: string}
+                forgejoUsername: {type: string}
+                forgejo:
+                  type: object
+                  properties:
+                    autoProvision: {type: boolean}
+                    email: {type: string}
+                    displayName: {type: string}
+                    admin: {type: boolean}
+                image: {type: string}
+                concurrency: {type: integer}
+                model: {type: string}
+                opencodeAgent: {type: string}
+                instructionConfigMap: {type: string}
+                instructionInline:
+                  type: object
+                  properties:
+                    fileName: {type: string}
+                    content: {type: string}
+                instructionMountPath: {type: string}
+                sshKeySecretRef:
+                  type: object
+                  properties:
+                    name: {type: string}
+                providerSecretRef:
+                  type: object
+                  properties:
+                    name: {type: string}
+                providerAuthFileKey: {type: string}
+                providerAuthInline:
+                  type: object
+                  properties:
+                    fileKey: {type: string}
+                    content: {type: string}
+                env:
+                  type: object
+                  additionalProperties:
+                    type: string
+                enabled: {type: boolean}
+            status:
+              type: object
+              properties:
+                phase: {type: string}
+                activeTasks: {type: integer}
+                forgejoUserID: {type: integer}
+                forgejoReady: {type: boolean}
+                sshSecretName: {type: string}
+                sshPublicKey: {type: string}
+                sshKeyFingerprint: {type: string}
+                forgejoTokenSecretName: {type: string}
+                assignedTaskRuns:
+                  type: array
+                  items:
+                    type: string
+                lastSeen:
+                  type: string
+                  format: date-time
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+      subresources:
+        status: {}

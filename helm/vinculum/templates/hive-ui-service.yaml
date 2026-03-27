@@ -1,0 +1,20 @@
+{{- if .Values.hiveUI.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vinculum.ui.name" . }}
+  labels:
+    {{- include "vinculum.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hive-ui
+spec:
+  type: {{ .Values.hiveUI.service.type }}
+  ports:
+    - port: {{ .Values.hiveUI.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ include "vinculum.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: hive-ui
+{{- end }}

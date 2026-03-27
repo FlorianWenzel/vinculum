@@ -1,0 +1,15 @@
+apiVersion: vinculum.dev/v1alpha1
+kind: ForgejoRepository
+metadata:
+  name: hive-sandbox
+  namespace: vinculum-system
+spec:
+  owner: vinculum
+  name: hive-sandbox
+  description: Sandbox repository for zora drone end-to-end tests.
+  private: true
+  autoInit: true
+  defaultBranch: main
+  access:
+    - droneRef: sample-coder
+      permission: write

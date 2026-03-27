@@ -1,0 +1,36 @@
+{{- if and .Values.hiveUI.enabled .Values.hiveUI.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "vinculum.ui.name" . }}
+  labels:
+    {{- include "vinculum.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hive-ui
+  {{- with .Values.hiveUI.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.hiveUI.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    {{- range .Values.hiveUI.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "vinculum.ui.name" $ }}
+                port:
+                  number: {{ $.Values.hiveUI.service.port }}
+          {{- end }}
+    {{- end }}
+  {{- with .Values.hiveUI.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,17 @@
+infrastructure:
+  enabled: false
+
+orchestrator:
+  enabled: false
+
+vinculumInfra:
+  image:
+    repository: ghcr.io/florianwenzel/vinculum-infra
+    tag: dev
+    pullPolicy: IfNotPresent
+  env:
+    autoBootstrap: true
+    keycloakIssuerURL: http://vinculum-infra-keycloak.vinculum-system.svc.cluster.local/realms/vinculum
+    keycloakForgejoRedirectURIs: http://localhost:3000/user/oauth2/*
+    keycloakForgejoWebOrigins: http://localhost:3000
+    forgejoPublicURL: http://localhost:3000

@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/orchestrator/go.mod
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/hive-ui/package-lock.json
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Test orchestrator
+        working-directory: apps/orchestrator
+        run: go test ./...
+
+      - name: Test infra bootstrap service
+        working-directory: apps/vinculum-infra
+        run: go test ./...
+
+      - name: Build Hive UI
+        working-directory: apps/hive-ui
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build infrastructure chart dependencies
+        run: helm dependency build helm/infrastructure
+
+      - name: Build umbrella chart dependencies
+        run: helm dependency build helm/vinculum
+
+      - name: Lint Helm charts
+        run: |
+          helm lint helm/infrastructure
+          helm lint helm/orchestrator
+          helm lint helm/drone
+          helm lint helm/vinculum
+
+      - name: Render deployable charts
+        run: |
+          helm template vinculum helm/vinculum --namespace vinculum-system >/tmp/vinculum-rendered.yaml
+          helm template orchestrator helm/orchestrator --namespace vinculum-system >/tmp/orchestrator-rendered.yaml
+
+      - name: Package and render remote-ready chart
+        run: |
+          mkdir -p /tmp/chart-packages
+          helm package helm/vinculum --destination /tmp/chart-packages
+          helm template vinculum /tmp/chart-packages/vinculum-*.tgz --namespace vinculum-system >/tmp/vinculum-packaged-rendered.yaml

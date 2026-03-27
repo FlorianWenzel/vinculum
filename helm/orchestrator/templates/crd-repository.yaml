@@ -1,0 +1,64 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: repositories.vinculum.dev
+spec:
+  group: vinculum.dev
+  scope: Namespaced
+  names:
+    plural: repositories
+    singular: repository
+    kind: Repository
+    shortNames: [repo]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Owner
+          type: string
+          jsonPath: .spec.owner
+        - name: Name
+          type: string
+          jsonPath: .spec.name
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: SSH URL
+          type: string
+          jsonPath: .status.sshUrl
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                owner: {type: string}
+                name: {type: string}
+                description: {type: string}
+                private: {type: boolean}
+                autoInit: {type: boolean}
+                defaultBranch: {type: string}
+                requirementsPath: {type: string}
+                defaultBaseBranch: {type: string}
+                requirementBranchPrefix: {type: string}
+                requirementsSource: {type: string}
+            status:
+              type: object
+              properties:
+                phase: {type: string}
+                httpUrl: {type: string}
+                sshUrl: {type: string}
+                webhookUrl: {type: string}
+                webhookReady: {type: boolean}
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+      subresources:
+        status: {}

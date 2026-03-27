@@ -1,0 +1,15 @@
+orchestrator:
+  image:
+    repository: ghcr.io/florianwenzel/vinculum-orchestrator
+    tag: ""
+    pullPolicy: IfNotPresent
+  defaultDroneImage:
+    repository: ghcr.io/florianwenzel/vinculum-agent
+    tag: ""
+  namespaceScoped: true
+  forgejo:
+    baseURL: ""
+    sshHost: ""
+    sshPort: "22"
+    adminUsername: vinculum
+    adminPassword: vinculum

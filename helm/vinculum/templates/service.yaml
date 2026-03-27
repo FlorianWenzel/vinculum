@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vinculum.infra.name" . }}
+  labels:
+    helm.sh/chart: {{ include "vinculum.chart" . }}
+    app.kubernetes.io/name: {{ include "vinculum.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  type: {{ .Values.vinculumInfra.service.type }}
+  ports:
+    - port: {{ .Values.vinculumInfra.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ include "vinculum.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: vinculum-infra

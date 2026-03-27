@@ -1,0 +1,17 @@
+apiVersion: v2
+name: infrastructure
+description: Local infrastructure dependencies for Vinculum
+type: application
+version: 0.2.0
+appVersion: 0.2.0
+
+dependencies:
+  - name: postgresql
+    version: 16.7.26
+    repository: oci://registry-1.docker.io/bitnamicharts
+  - name: keycloak
+    version: 25.2.0
+    repository: https://charts.bitnami.com/bitnami
+  - name: forgejo
+    version: 16.2.1
+    repository: oci://code.forgejo.org/forgejo-helm

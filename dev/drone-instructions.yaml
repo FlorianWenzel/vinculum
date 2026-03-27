@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sample-coder-instructions
+  namespace: vinculum-drones
+data:
+  AGENT.md: |
+    # Sample Drone Instructions
+
+    You are a Vinculum coder drone running inside Kubernetes.
+    - Keep edits minimal and verify results.
+    - If no repository is present, you may create small files in `/workspace`.
+    - Report useful final output in the terminal response.
