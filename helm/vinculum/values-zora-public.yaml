@@ -1,0 +1,67 @@
+vinculumInfra:
+  env:
+    keycloakIssuerURL: https://id.vincula.dev/realms/vinculum
+    keycloakForgejoRedirectURIs: https://git.vincula.dev/user/oauth2/*
+    keycloakForgejoWebOrigins: https://git.vincula.dev
+    forgejoPublicURL: https://git.vincula.dev
+
+infrastructure:
+  keycloak:
+    production: true
+    hostnameStrict: true
+    ingress:
+      enabled: true
+      hostname: id.vincula.dev
+      tls: false
+      ingressClassName: ""
+      annotations: {}
+      extraTls: []
+
+  forgejo:
+    ingress:
+      enabled: true
+      className: ""
+      annotations: {}
+      hosts:
+        - host: git.vincula.dev
+          paths:
+            - path: /
+              pathType: Prefix
+              port: http
+      tls: []
+    gitea:
+      config:
+        server:
+          DOMAIN: git.vincula.dev
+          ROOT_URL: https://git.vincula.dev/
+          SSH_DOMAIN: git.vincula.dev
+          SSH_PORT: 22
+
+hiveUI:
+  auth:
+    enabled: true
+    publicURL: https://app.vincula.dev
+    oauth2Proxy:
+      cookieSecure: true
+  ingress:
+    enabled: true
+    className: ""
+    annotations: {}
+    hosts:
+      - host: app.vincula.dev
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+
+website:
+  ingress:
+    enabled: true
+    className: ""
+    annotations: {}
+    hosts:
+      - host: vincula.dev
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []

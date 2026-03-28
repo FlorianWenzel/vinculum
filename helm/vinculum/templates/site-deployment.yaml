@@ -1,0 +1,43 @@
+{{- if .Values.website.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vinculum.site.name" . }}
+  labels:
+    {{- include "vinculum.labels" . | nindent 4 }}
+    app.kubernetes.io/component: website
+spec:
+  replicas: {{ .Values.website.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "vinculum.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: website
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "vinculum.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: website
+    spec:
+      containers:
+        - name: website
+          image: "{{ .Values.website.image.repository }}:{{ default .Chart.AppVersion .Values.website.image.tag }}"
+          imagePullPolicy: {{ .Values.website.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+{{- end }}

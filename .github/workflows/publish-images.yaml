@@ -27,6 +27,8 @@ jobs:
             dockerfile: apps/vinculum-infra/Dockerfile
           - image: vinculum-hive-ui
             dockerfile: apps/hive-ui/Dockerfile
+          - image: vinculum-site
+            dockerfile: apps/site/Dockerfile
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

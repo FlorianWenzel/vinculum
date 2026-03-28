@@ -35,6 +35,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-hive-ui" .Release.Name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "vinculum.site.name" -}}
+{{- printf "%s-site" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "vinculum.keycloakBaseURL" -}}
 {{- default (printf "http://%s-keycloak.%s.svc.cluster.local" .Release.Name .Release.Namespace) .Values.vinculumInfra.env.keycloakBaseURL -}}
 {{- end -}}
@@ -65,4 +69,12 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{- define "vinculum.forgejoPodLabelSelector" -}}
 {{- default (printf "app.kubernetes.io/instance=%s,app.kubernetes.io/name=forgejo" .Release.Name) .Values.vinculumInfra.env.forgejoPodLabelSelector -}}
+{{- end -}}
+
+{{- define "vinculum.hiveUIPublicURL" -}}
+{{- default "http://localhost:4173" .Values.hiveUI.auth.publicURL -}}
+{{- end -}}
+
+{{- define "vinculum.hiveUIRedirectURL" -}}
+{{- printf "%s/oauth2/callback" (include "vinculum.hiveUIPublicURL" .) -}}
 {{- end -}}

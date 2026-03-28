@@ -44,6 +44,51 @@ spec:
             - name: nginx-config
               mountPath: /etc/nginx/conf.d/default.conf
               subPath: default.conf
+        {{- if .Values.hiveUI.auth.enabled }}
+        - name: oauth2-proxy
+          image: "{{ .Values.hiveUI.auth.oauth2Proxy.image.repository }}:{{ .Values.hiveUI.auth.oauth2Proxy.image.tag }}"
+          imagePullPolicy: {{ .Values.hiveUI.auth.oauth2Proxy.image.pullPolicy }}
+          args:
+            - --http-address=0.0.0.0:4180
+            - --provider=keycloak-oidc
+            - --oidc-issuer-url={{ include "vinculum.keycloakIssuerURL" . }}
+            - --client-id={{ .Values.vinculumInfra.env.keycloakHiveUIClientID }}
+            - --redirect-url={{ include "vinculum.hiveUIRedirectURL" . }}
+            - --upstream=http://127.0.0.1:8080/
+            - --email-domain=*
+            - --cookie-secure={{ ternary "true" "false" .Values.hiveUI.auth.oauth2Proxy.cookieSecure }}
+            - --code-challenge-method=S256
+            - --skip-provider-button=true
+            - --reverse-proxy=true
+            - --set-xauthrequest=true
+          env:
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vinculum.ui.name" . }}-auth
+                  key: cookie-secret
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vinculum.ui.name" . }}-auth
+                  key: client-secret
+          ports:
+            - name: oauth2
+              containerPort: 4180
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: oauth2
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: oauth2
+            initialDelaySeconds: 5
+            periodSeconds: 15
+        {{- end }}
       volumes:
         - name: nginx-config
           configMap:

@@ -1,0 +1,36 @@
+{{- if and .Values.website.enabled .Values.website.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "vinculum.site.name" . }}
+  labels:
+    {{- include "vinculum.labels" . | nindent 4 }}
+    app.kubernetes.io/component: website
+  {{- with .Values.website.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.website.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    {{- range .Values.website.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "vinculum.site.name" $ }}
+                port:
+                  number: {{ $.Values.website.service.port }}
+          {{- end }}
+    {{- end }}
+  {{- with .Values.website.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

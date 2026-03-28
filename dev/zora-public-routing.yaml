@@ -1,0 +1,86 @@
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: vinculum-public
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - vincula.dev
+        - app.vincula.dev
+        - git.vincula.dev
+        - id.vincula.dev
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: website-public
+  namespace: istio-system
+spec:
+  hosts:
+    - vincula.dev
+  gateways:
+    - istio-system/vinculum-public
+  http:
+    - route:
+        - destination:
+            host: vinculum-site.vinculum-system.svc.cluster.local
+            port:
+              number: 80
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: hive-ui-public
+  namespace: istio-system
+spec:
+  hosts:
+    - app.vincula.dev
+  gateways:
+    - istio-system/vinculum-public
+  http:
+    - route:
+        - destination:
+            host: vinculum-hive-ui.vinculum-system.svc.cluster.local
+            port:
+              number: 80
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: forgejo-public
+  namespace: istio-system
+spec:
+  hosts:
+    - git.vincula.dev
+  gateways:
+    - istio-system/vinculum-public
+  http:
+    - route:
+        - destination:
+            host: vinculum-forgejo-http.vinculum-system.svc.cluster.local
+            port:
+              number: 3000
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: keycloak-public
+  namespace: istio-system
+spec:
+  hosts:
+    - id.vincula.dev
+  gateways:
+    - istio-system/vinculum-public
+  http:
+    - route:
+        - destination:
+            host: vinculum-keycloak.vinculum-system.svc.cluster.local
+            port:
+              number: 80

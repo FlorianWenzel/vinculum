@@ -25,16 +25,18 @@ type Result struct {
 }
 
 type KeycloakResult struct {
-	Realm         string   `json:"realm"`
-	RealmCreated  bool     `json:"realmCreated"`
-	ClientID      string   `json:"clientId"`
-	ClientCreated bool     `json:"clientCreated"`
-	ClientSecret  string   `json:"clientSecret"`
-	IssuerURL     string   `json:"issuerUrl"`
-	RedirectURIs  []string `json:"redirectUris"`
-	AdminGroup    string   `json:"adminGroup"`
-	BootstrapUser string   `json:"bootstrapUser"`
-	UserCreated   bool     `json:"userCreated"`
+	Realm               string   `json:"realm"`
+	RealmCreated        bool     `json:"realmCreated"`
+	ClientID            string   `json:"clientId"`
+	ClientCreated       bool     `json:"clientCreated"`
+	HiveUIClientID      string   `json:"hiveUiClientId"`
+	HiveUIClientCreated bool     `json:"hiveUiClientCreated"`
+	ClientSecret        string   `json:"clientSecret"`
+	IssuerURL           string   `json:"issuerUrl"`
+	RedirectURIs        []string `json:"redirectUris"`
+	AdminGroup          string   `json:"adminGroup"`
+	BootstrapUser       string   `json:"bootstrapUser"`
+	UserCreated         bool     `json:"userCreated"`
 }
 
 type ForgejoResult struct {
@@ -68,6 +70,11 @@ func (s *Service) Bootstrap(ctx context.Context) (Result, error) {
 		return Result{}, err
 	}
 
+	hiveUIClientInfo, err := s.keycloak.EnsureHiveUIClient(ctx)
+	if err != nil {
+		return Result{}, err
+	}
+
 	bootstrapUser, err := s.keycloak.EnsureBootstrapUser(ctx)
 	if err != nil {
 		return Result{}, err
@@ -91,16 +98,18 @@ func (s *Service) Bootstrap(ctx context.Context) (Result, error) {
 	result := Result{
 		Timestamp: time.Now().UTC(),
 		Keycloak: KeycloakResult{
-			Realm:         s.cfg.Keycloak.Realm,
-			RealmCreated:  realmCreated,
-			ClientID:      clientInfo.ClientID,
-			ClientCreated: clientInfo.Created,
-			ClientSecret:  clientInfo.Secret,
-			IssuerURL:     s.cfg.Keycloak.RealmIssuerURL(),
-			RedirectURIs:  s.cfg.Keycloak.EffectiveRedirectURIs(),
-			AdminGroup:    bootstrapUser.Group,
-			BootstrapUser: bootstrapUser.Username,
-			UserCreated:   bootstrapUser.Created,
+			Realm:               s.cfg.Keycloak.Realm,
+			RealmCreated:        realmCreated,
+			ClientID:            clientInfo.ClientID,
+			ClientCreated:       clientInfo.Created,
+			HiveUIClientID:      hiveUIClientInfo.ClientID,
+			HiveUIClientCreated: hiveUIClientInfo.Created,
+			ClientSecret:        clientInfo.Secret,
+			IssuerURL:           s.cfg.Keycloak.RealmIssuerURL(),
+			RedirectURIs:        s.cfg.Keycloak.EffectiveRedirectURIs(),
+			AdminGroup:          bootstrapUser.Group,
+			BootstrapUser:       bootstrapUser.Username,
+			UserCreated:         bootstrapUser.Created,
 		},
 		Forgejo: ForgejoResult{
 			BaseURL:             s.cfg.Forgejo.BaseURL,
@@ -113,7 +122,7 @@ func (s *Service) Bootstrap(ctx context.Context) (Result, error) {
 			AdminUsername:       s.cfg.Forgejo.AdminUsername,
 		},
 		Notes: []string{
-			"The service reconciles the Keycloak realm, themed login, OIDC client, bootstrap admin user, Forgejo organization, and Forgejo OIDC login source.",
+			"The service reconciles the Keycloak realm, themed login, OIDC clients, bootstrap admin user, Forgejo organization, and Forgejo OIDC login source.",
 			"Configured OIDC URLs stay primary, and localhost dev URLs are added automatically for local browser flows.",
 		},
 	}

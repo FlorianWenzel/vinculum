@@ -113,9 +113,9 @@ forgejo:
     size: 5Gi
   gitea:
     admin:
-      username: vinculum
-      password: vinculum
-      email: admin@vinculum.local
+      username: hive_queen
+      password: hive_queen
+      email: hive_queen@vinculum.local
     additionalConfigFromEnvs:
       - name: FORGEJO__DATABASE__PASSWD
         value: forgejo

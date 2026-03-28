@@ -4,6 +4,10 @@
 
 An autonomous, AI-driven software development platform. Coordinated agent swarms handle coding, review, testing, and deployment in iterative loops — from requirements to production. Built on Kubernetes, powered by [OpenCode](https://opencode.ai), inspired by the Collective.
 
+Key docs:
+
+- Deployment and publishing flow: [`Deployment.md`](Deployment.md)
+
 ---
 
 ## How It Works
@@ -40,34 +44,40 @@ The orchestrator can escalate to the human user when ambiguity arises — unclea
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Vinculum Cluster                   │
-│                                                      │
-│  ┌───────────┐   ┌──────────────┐   ┌────────────┐  │
-│  │    Web     │──▶│ Orchestrator │◀──│  Webhook   │  │
-│  │    App     │   │ (Vinculum)   │   │   Relay    │  │
-│  └───────────┘   └──────┬───────┘   └─────▲──────┘  │
-│                         │                  │         │
-│            ┌────────────┼──────────┐       │         │
-│            ▼            ▼          ▼       │         │
-│     ┌──────────┐ ┌──────────┐ ┌────────┐  │         │
-│     │  Coder   │ │ Reviewer │ │ Tester │  │         │
-│     │  Drone   │ │  Drone   │ │ Drone  │  │         │
-│     └────┬─────┘ └────┬─────┘ └───┬────┘  │         │
-│          │             │           │       │         │
-│          ▼             ▼           ▼       │         │
-│     ┌──────────────────────────────────────┘         │
-│     │              Forgejo                           │
-│     │        (Git, PRs, Issues)                      │
-│     └────────────────────────────────────────────┐   │
-│                                                  │   │
-│  ┌────────────┐  ┌───────────┐  ┌─────────────┐ │   │
-│  │  Keycloak  │  │ SonarQube │  │    Argo     │ │   │
-│  │   (Auth)   │  │   (QA)    │  │ (Workflows) │ │   │
-│  └────────────┘  └───────────┘  └─────────────┘ │   │
-│                                                  │   │
-└──────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────┐
+│                    Vinculum Cluster                   │
+│                                                       │
+│  ┌────────────┐      ┌────────────────────────────┐   │
+│  │  Hive UI   │─────▶│ Orchestrator API + Operator│   │
+│  │   (Vue)    │      │   Drone/Task controllers   │   │
+│  └────────────┘      └──────────────┬─────────────┘   │
+│                                      │                 │
+│                                      ▼                 │
+│                         ┌──────────────────────────┐    │
+│                         │ Drone Jobs / Agent Pods  │    │
+│                         │  OpenCode + control API  │    │
+│                         └──────────────┬───────────┘    │
+│                                        │                │
+│                                        ▼                │
+│     ┌──────────────┐   ┌────────────┐   ┌────────────┐ │
+│     │   Keycloak   │◀──│ Vinculum   │──▶│  Forgejo   │ │
+│     │    (OIDC)    │   │   Infra    │   │Vinculum Code│ │
+│     └──────┬───────┘   └────────────┘   └──────┬─────┘ │
+│            │                                    │       │
+│            └──────────────┬─────────────────────┘       │
+│                           ▼                             │
+│                      PostgreSQL                         │
+└───────────────────────────────────────────────────────┘
 ```
+
+Today the deployable stack consists of six core runtime components:
+
+- `postgresql` for shared persistence
+- `keycloak` for identity and OIDC
+- `forgejo` branded as `Vinculum Code`
+- `vinculum-infra` for bootstrap and reconciliation across Keycloak and Forgejo
+- `orchestrator` for CRDs, scheduling, and the cluster API
+- `hive-ui` for the current browser-based control surface
 
 ---
 
@@ -75,15 +85,15 @@ The orchestrator can escalate to the human user when ambiguity arises — unclea
 
 | Component | Technology           | Purpose |
 |---|----------------------|---|
-| Orchestrator | Go | Task graph management, drone coordination |
-| Infra Bootstrap | Go | Provisions and reconciles platform dependencies such as Keycloak and Forgejo |
-| Web App | Vue | User interface, project management, requirements gathering |
-| Drones | OpenCode (in Docker) | AI-powered coding, reviewing, testing |
-| Git Platform | Forgejo              | Repositories, pull requests, issue tracking |
-| Auth | Keycloak             | SSO, user management, API auth |
-| Code Quality | SonarQube            | Static analysis, coverage gates |
-| Workflow Engine | Argo Workflows       | Drone lifecycle, pipeline orchestration |
-| Infrastructure | Kubernetes           | Container orchestration |
+| Orchestrator | Go | Kubernetes operator, API surface, task and drone coordination |
+| Infra Bootstrap | Go | Reconciles Keycloak and Forgejo bootstrap state |
+| Hive UI | Vue + Vite | Cluster dashboard and workflow UI |
+| Drone Runtime | OpenCode + Go | Containerized coding agent runtime with control API |
+| Git Platform | Forgejo | Repositories, pull requests, issues, and SSH access |
+| Auth | Keycloak | SSO, realms, clients, and OIDC |
+| Database | PostgreSQL | Shared persistence for Keycloak and Forgejo |
+| Packaging | Helm + GHCR | Remote-installable charts and published container images |
+| Infrastructure | Kubernetes | Runtime platform for the full stack |
 
 ---
 
@@ -97,7 +107,7 @@ vinculum/
 │   ├── hive-ui/             # Vue admin dashboard for the hive
 │   ├── vinculum-agent/      # Go control API that wraps OpenCode inside a worker container
 │   ├── vinculum-infra/      # Go bootstrap/reconciliation service for Keycloak + Vinculum Code
-│   └── orchestrator/        # Go Kubernetes operator for Drone and TaskRun CRDs
+│   └── orchestrator/        # Go Kubernetes operator and API for Drone/Repository/Task flows
 ├── helm/
 │   ├── drone/               # Parameterized chart for spawning OpenCode worker pods
 │   ├── infrastructure/      # Shared PostgreSQL, Keycloak, and Forgejo/Vinculum Code
@@ -108,7 +118,7 @@ vinculum/
 └── README.md
 ```
 
-Planned repo expansion still includes orchestrator, web UI, drones, shared packages, docs, and Argo templates, but those are not scaffolded yet.
+This repo already contains the currently deployable control plane, UI, drone runtime, and Helm packaging. Planned expansion still includes deeper task execution flows, richer review/test automation, and more end-user product surfaces.
 
 ---
 
@@ -190,6 +200,16 @@ That single chart installs:
 
 The default chart values are cluster-internal and work well with `kubectl port-forward`. For browser-facing ingress or custom domains, override the Forgejo/Keycloak public URLs and enable `hiveUI.ingress`.
 
+The umbrella chart supports public hostnames for all three browser-facing surfaces:
+
+- Hive UI via `hiveUI.ingress`
+- Forgejo via `infrastructure.forgejo.ingress` plus `infrastructure.forgejo.gitea.config.server.*`
+- Keycloak via `infrastructure.keycloak.ingress` plus `vinculumInfra.env.keycloakIssuerURL`
+
+An example values file for `vincula.dev`, `git.vincula.dev`, and `id.vincula.dev` lives at `helm/vinculum/values-vincula-dev.yaml`.
+
+The remote chart install path is tested against a clean cluster. A fresh install should converge to running `postgresql`, `keycloak`, `forgejo`, `vinculum-infra`, `orchestrator`, and `hive-ui` pods in the `vinculum-system` namespace.
+
 Local development now targets the `zora` cluster through `Tilt`, with the full stack consolidated into the `vinculum-system` namespace: infrastructure, `vinculum-infra`, the operator, and the Hive UI. Demo resources are created step-by-step through the API/UI after the platform is healthy.
 
 The Hive admin dashboard lives in `apps/hive-ui` and reads the operator's `/api/overview` endpoint to show drones, repositories, requirements, tasks, reviews, access grants, and jobs from the cluster.
@@ -229,7 +249,7 @@ helm template drone ./helm/drone -n vinculum-drones
 helm template orchestrator ./helm/orchestrator -n vinculum-system
 ```
 
-Current backend direction is Go for services and Vue for the future frontend.
+The current implementation is Go for cluster services and Vue for the shipped UI.
 
 The first concrete backend slice is `apps/vinculum-infra`, a small reconciliation service that talks to Keycloak and Forgejo over their APIs to establish base platform state.
 
@@ -237,7 +257,7 @@ The next backend slice is a single-container OpenCode drone runtime: one contain
 
 That runtime now exists in `apps/vinculum-agent` and is packaged by `helm/drone`. The container starts a local `opencode serve` process, exposes a Go HTTP API for `/run` and `/exec`, and is designed to receive mounted SSH keys plus instruction markdown through Kubernetes volumes.
 
-The control plane direction is now a Go Kubernetes operator in `apps/orchestrator`. It introduces durable `Drone` resources for named worker identities, `Repository` resources for managed repository provisioning, `DroneRepositoryAccess` resources for granting agent access to repositories, `Requirement` resources for user-facing feature requests, `Task` resources for derived technical work, and `Review` resources for explicit review decisions. The operator binds runnable `Task`s to available `Drone`s, spawns worker `Job`s from the drone config, and tracks active work on each drone.
+The control plane in `apps/orchestrator` is a Go Kubernetes operator plus HTTP API. It introduces durable `Drone` resources for named worker identities, `Repository` resources for managed repository provisioning, `DroneRepositoryAccess` resources for granting agent access to repositories, `Requirement` resources for user-facing feature requests, `Task` resources for derived technical work, and `Review` resources for explicit review decisions. The operator binds runnable `Task`s to available `Drone`s, spawns worker `Job`s from the drone config, and tracks active work on each drone.
 
 `Drone` now supports both inline and referenced configuration for instructions and provider auth: inline content is convenient for local testing and UI-driven workflows, while `ConfigMap`/`Secret` references remain the better fit for production-style setups.
 
@@ -266,7 +286,7 @@ The corresponding HTTP endpoints are:
 - `POST /api/task-drafts`
 - `POST /api/requirement-drafts`
 
-For Kubernetes deployment, `helm/vinculum` is now the umbrella chart for the full stack, while `helm/infrastructure`, `helm/orchestrator`, and `helm/drone` remain available as lower-level building blocks.
+For Kubernetes deployment, `helm/vinculum` is the umbrella chart for the full stack, while `helm/infrastructure`, `helm/orchestrator`, and `helm/drone` remain available as lower-level building blocks.
 
 For local inner-loop development, `Tilt` builds `apps/vinculum-infra`, deploys both Helm charts, and forwards Vinculum Code plus Keycloak for browser access.
 

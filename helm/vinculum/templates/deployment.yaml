@@ -50,6 +50,17 @@ spec:
               value: {{ include "vinculum.keycloakForgejoRedirectURIs" . | quote }}
             - name: KEYCLOAK_FORGEJO_WEB_ORIGINS
               value: {{ include "vinculum.keycloakForgejoWebOrigins" . | quote }}
+            - name: KEYCLOAK_HIVE_UI_CLIENT_ID
+              value: {{ .Values.vinculumInfra.env.keycloakHiveUIClientID | quote }}
+            - name: KEYCLOAK_HIVE_UI_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vinculum.ui.name" . }}-auth
+                  key: client-secret
+            - name: KEYCLOAK_HIVE_UI_REDIRECT_URIS
+              value: {{ default (include "vinculum.hiveUIRedirectURL" .) .Values.vinculumInfra.env.keycloakHiveUIRedirectURIs | quote }}
+            - name: KEYCLOAK_HIVE_UI_WEB_ORIGINS
+              value: {{ default (include "vinculum.hiveUIPublicURL" .) .Values.vinculumInfra.env.keycloakHiveUIWebOrigins | quote }}
             - name: FORGEJO_BASE_URL
               value: {{ include "vinculum.forgejoBaseURL" . | quote }}
             - name: FORGEJO_PUBLIC_URL

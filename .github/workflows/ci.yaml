@@ -45,6 +45,12 @@ jobs:
           npm ci
           npm run build
 
+      - name: Build website
+        working-directory: apps/site
+        run: |
+          npm ci
+          npm run generate
+
       - name: Build infrastructure chart dependencies
         run: helm dependency build helm/infrastructure
 

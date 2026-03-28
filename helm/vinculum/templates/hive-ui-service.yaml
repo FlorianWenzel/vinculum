@@ -10,7 +10,7 @@ spec:
   type: {{ .Values.hiveUI.service.type }}
   ports:
     - port: {{ .Values.hiveUI.service.port }}
-      targetPort: http
+      targetPort: {{ ternary "oauth2" "http" .Values.hiveUI.auth.enabled }}
       protocol: TCP
       name: http
   selector:

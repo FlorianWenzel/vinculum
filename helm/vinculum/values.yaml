@@ -24,6 +24,9 @@ vinculumInfra:
     keycloakForgejoClientID: forgejo
     keycloakForgejoRedirectURIs: ""
     keycloakForgejoWebOrigins: ""
+    keycloakHiveUIClientID: hive-ui
+    keycloakHiveUIRedirectURIs: ""
+    keycloakHiveUIWebOrigins: ""
     forgejoBaseURL: ""
     forgejoPublicURL: ""
     forgejoOrgName: vinculum
@@ -34,8 +37,8 @@ vinculumInfra:
   secrets:
     keycloakAdminUsername: admin
     keycloakAdminPassword: admin
-    forgejoAdminUsername: vinculum
-    forgejoAdminPassword: vinculum
+    forgejoAdminUsername: hive_queen
+    forgejoAdminPassword: hive_queen
 
 hiveUI:
   enabled: true
@@ -47,12 +50,44 @@ hiveUI:
   service:
     type: ClusterIP
     port: 80
+  auth:
+    enabled: false
+    publicURL: ""
+    cookieSecret: ""
+    clientSecret: ""
+    oauth2Proxy:
+      image:
+        repository: quay.io/oauth2-proxy/oauth2-proxy
+        tag: v7.8.1
+        pullPolicy: IfNotPresent
+      cookieSecure: true
   ingress:
     enabled: false
     className: ""
     annotations: {}
     hosts:
       - host: vinculum.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+
+website:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/florianwenzel/vinculum-site
+    tag: ""
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: vincula.dev
         paths:
           - path: /
             pathType: Prefix

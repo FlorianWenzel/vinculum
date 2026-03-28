@@ -15,18 +15,22 @@ type Config struct {
 }
 
 type KeycloakConfig struct {
-	BaseURL         string
-	IssuerURL       string
-	AdminRealm      string
-	AdminUsername   string
-	AdminPassword   string
-	Realm           string
-	AdminGroup      string
-	BootstrapUser   string
-	BootstrapPass   string
-	ForgejoClientID string
-	RedirectURIs    []string
-	WebOrigins      []string
+	BaseURL            string
+	IssuerURL          string
+	AdminRealm         string
+	AdminUsername      string
+	AdminPassword      string
+	Realm              string
+	AdminGroup         string
+	BootstrapUser      string
+	BootstrapPass      string
+	ForgejoClientID    string
+	RedirectURIs       []string
+	WebOrigins         []string
+	HiveUIClientID     string
+	HiveUIClientSecret string
+	HiveUIRedirects    []string
+	HiveUIOrigins      []string
 }
 
 type ForgejoConfig struct {
@@ -46,24 +50,28 @@ func Load() Config {
 		ServerAddr:    envOrDefault("SERVER_ADDR", ":8081"),
 		AutoBootstrap: envOrDefault("AUTO_BOOTSTRAP", "false") == "true",
 		Keycloak: KeycloakConfig{
-			BaseURL:         normalizeBaseURL(envOrDefault("KEYCLOAK_BASE_URL", "http://localhost:8080")),
-			IssuerURL:       normalizeBaseURL(envOrDefault("KEYCLOAK_ISSUER_URL", "http://localhost:8080/realms/vinculum")),
-			AdminRealm:      envOrDefault("KEYCLOAK_ADMIN_REALM", "master"),
-			AdminUsername:   envOrDefault("KEYCLOAK_ADMIN_USERNAME", "admin"),
-			AdminPassword:   envOrDefault("KEYCLOAK_ADMIN_PASSWORD", "admin"),
-			Realm:           envOrDefault("KEYCLOAK_REALM", "vinculum"),
-			AdminGroup:      envOrDefault("KEYCLOAK_FORGEJO_ADMIN_GROUP", "forgejo_admins"),
-			BootstrapUser:   envOrDefault("KEYCLOAK_BOOTSTRAP_USERNAME", "picard"),
-			BootstrapPass:   envOrDefault("KEYCLOAK_BOOTSTRAP_PASSWORD", "picard"),
-			ForgejoClientID: envOrDefault("KEYCLOAK_FORGEJO_CLIENT_ID", "forgejo"),
-			RedirectURIs:    splitCSV(envOrDefault("KEYCLOAK_FORGEJO_REDIRECT_URIS", "http://localhost:3000/user/oauth2/*")),
-			WebOrigins:      splitCSV(envOrDefault("KEYCLOAK_FORGEJO_WEB_ORIGINS", "http://localhost:3000")),
+			BaseURL:            normalizeBaseURL(envOrDefault("KEYCLOAK_BASE_URL", "http://localhost:8080")),
+			IssuerURL:          normalizeBaseURL(envOrDefault("KEYCLOAK_ISSUER_URL", "http://localhost:8080/realms/vinculum")),
+			AdminRealm:         envOrDefault("KEYCLOAK_ADMIN_REALM", "master"),
+			AdminUsername:      envOrDefault("KEYCLOAK_ADMIN_USERNAME", "admin"),
+			AdminPassword:      envOrDefault("KEYCLOAK_ADMIN_PASSWORD", "admin"),
+			Realm:              envOrDefault("KEYCLOAK_REALM", "vinculum"),
+			AdminGroup:         envOrDefault("KEYCLOAK_FORGEJO_ADMIN_GROUP", "forgejo_admins"),
+			BootstrapUser:      envOrDefault("KEYCLOAK_BOOTSTRAP_USERNAME", "picard"),
+			BootstrapPass:      envOrDefault("KEYCLOAK_BOOTSTRAP_PASSWORD", "picard"),
+			ForgejoClientID:    envOrDefault("KEYCLOAK_FORGEJO_CLIENT_ID", "forgejo"),
+			RedirectURIs:       splitCSV(envOrDefault("KEYCLOAK_FORGEJO_REDIRECT_URIS", "http://localhost:3000/user/oauth2/*")),
+			WebOrigins:         splitCSV(envOrDefault("KEYCLOAK_FORGEJO_WEB_ORIGINS", "http://localhost:3000")),
+			HiveUIClientID:     envOrDefault("KEYCLOAK_HIVE_UI_CLIENT_ID", "hive-ui"),
+			HiveUIClientSecret: envOrDefault("KEYCLOAK_HIVE_UI_CLIENT_SECRET", "hive-ui-secret"),
+			HiveUIRedirects:    splitCSV(envOrDefault("KEYCLOAK_HIVE_UI_REDIRECT_URIS", "http://localhost:4173/oauth2/callback")),
+			HiveUIOrigins:      splitCSV(envOrDefault("KEYCLOAK_HIVE_UI_WEB_ORIGINS", "http://localhost:4173")),
 		},
 		Forgejo: ForgejoConfig{
 			BaseURL:          normalizeBaseURL(envOrDefault("FORGEJO_BASE_URL", "http://localhost:3000")),
 			PublicURL:        normalizeBaseURL(envOrDefault("FORGEJO_PUBLIC_URL", "http://localhost:3000")),
-			AdminUsername:    envOrDefault("FORGEJO_ADMIN_USERNAME", "vinculum"),
-			AdminPassword:    envOrDefault("FORGEJO_ADMIN_PASSWORD", "vinculum"),
+			AdminUsername:    envOrDefault("FORGEJO_ADMIN_USERNAME", "hive_queen"),
+			AdminPassword:    envOrDefault("FORGEJO_ADMIN_PASSWORD", "hive_queen"),
 			OrgName:          envOrDefault("FORGEJO_ORG_NAME", "vinculum"),
 			OrgVisibility:    envOrDefault("FORGEJO_ORG_VISIBILITY", "private"),
 			AuthSourceName:   envOrDefault("FORGEJO_AUTH_SOURCE_NAME", "Vinculum"),
@@ -91,6 +99,14 @@ func (c KeycloakConfig) EffectiveRedirectURIs() []string {
 
 func (c KeycloakConfig) EffectiveWebOrigins() []string {
 	return appendDevForgejoURLs(c.WebOrigins, "")
+}
+
+func (c KeycloakConfig) EffectiveHiveUIRedirectURIs() []string {
+	return append([]string(nil), c.HiveUIRedirects...)
+}
+
+func (c KeycloakConfig) EffectiveHiveUIWebOrigins() []string {
+	return append([]string(nil), c.HiveUIOrigins...)
 }
 
 func envOrDefault(key, fallback string) string {

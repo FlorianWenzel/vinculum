@@ -130,8 +130,55 @@ func (c *Client) EnsureOrganization(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if status == http.StatusUnprocessableEntity && c.cfg.AdminUsername != c.cfg.OrgName {
+		migrated, err := c.migrateLegacyUserCollision(ctx)
+		if err != nil {
+			return false, err
+		}
+		if migrated {
+			status, _, err = c.doJSON(ctx, http.MethodPost, c.cfg.BaseURL+"/api/v1/admin/users/"+c.cfg.AdminUsername+"/orgs", body, nil)
+			if err != nil {
+				return false, err
+			}
+		}
+	}
 	if status != http.StatusCreated {
 		return false, fmt.Errorf("unexpected Forgejo organization create status %d", status)
+	}
+
+	return true, nil
+}
+
+func (c *Client) migrateLegacyUserCollision(ctx context.Context) (bool, error) {
+	var existing user
+	status, _, err := c.doJSON(ctx, http.MethodGet, c.cfg.BaseURL+"/api/v1/users/"+c.cfg.OrgName, nil, &existing)
+	if err == nil && status == http.StatusNotFound {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if status != http.StatusOK {
+		return false, fmt.Errorf("unexpected Forgejo legacy user lookup status %d", status)
+	}
+	if existing.UserName != c.cfg.OrgName || existing.UserName == c.cfg.AdminUsername {
+		return false, nil
+	}
+
+	legacyEmails := map[string]struct{}{
+		"admin@vinculum.local":                          {},
+		fmt.Sprintf("%s@vinculum.local", c.cfg.OrgName): {},
+	}
+	if _, ok := legacyEmails[strings.ToLower(existing.Email)]; !ok {
+		return false, fmt.Errorf("forgejo organization name %q collides with existing user %q", c.cfg.OrgName, existing.UserName)
+	}
+
+	status, _, err = c.doJSON(ctx, http.MethodDelete, c.cfg.BaseURL+"/api/v1/admin/users/"+c.cfg.OrgName, nil, nil)
+	if err != nil {
+		return false, err
+	}
+	if status != http.StatusNoContent && status != http.StatusNotFound {
+		return false, fmt.Errorf("unexpected Forgejo legacy user delete status %d", status)
 	}
 
 	return true, nil

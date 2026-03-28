@@ -24,6 +24,11 @@ type ForgejoClientInfo struct {
 	Created  bool
 }
 
+type HiveUIClientInfo struct {
+	ClientID string
+	Created  bool
+}
+
 type BootstrapUserInfo struct {
 	Username string `json:"username"`
 	Group    string `json:"group"`
@@ -47,6 +52,7 @@ type realmRepresentation struct {
 type clientRepresentation struct {
 	ID                        string            `json:"id,omitempty"`
 	ClientID                  string            `json:"clientId"`
+	Secret                    string            `json:"secret,omitempty"`
 	Name                      string            `json:"name,omitempty"`
 	Description               string            `json:"description,omitempty"`
 	Enabled                   bool              `json:"enabled"`
@@ -221,6 +227,58 @@ func (c *Client) EnsureForgejoClient(ctx context.Context) (ForgejoClientInfo, er
 	}, nil
 }
 
+func (c *Client) EnsureHiveUIClient(ctx context.Context) (HiveUIClientInfo, error) {
+	token, err := c.adminToken(ctx)
+	if err != nil {
+		return HiveUIClientInfo{}, err
+	}
+
+	lookupURL := fmt.Sprintf("%s/admin/realms/%s/clients?clientId=%s", c.cfg.BaseURL, c.cfg.Realm, url.QueryEscape(c.cfg.HiveUIClientID))
+	var existing []clientRepresentation
+	status, _, err := c.doJSON(ctx, http.MethodGet, lookupURL, token, nil, &existing)
+	if err != nil {
+		return HiveUIClientInfo{}, err
+	}
+	if status != http.StatusOK {
+		return HiveUIClientInfo{}, fmt.Errorf("unexpected Keycloak hive UI client lookup status %d", status)
+	}
+
+	representation := c.desiredHiveUIClient()
+	created := false
+	var clientID string
+
+	if len(existing) == 0 {
+		status, _, err = c.doJSON(ctx, http.MethodPost, fmt.Sprintf("%s/admin/realms/%s/clients", c.cfg.BaseURL, c.cfg.Realm), token, representation, nil)
+		if err != nil {
+			return HiveUIClientInfo{}, err
+		}
+		if status != http.StatusCreated {
+			return HiveUIClientInfo{}, fmt.Errorf("unexpected Keycloak hive UI client create status %d", status)
+		}
+		created = true
+
+		status, _, err = c.doJSON(ctx, http.MethodGet, lookupURL, token, nil, &existing)
+		if err != nil {
+			return HiveUIClientInfo{}, err
+		}
+		if status != http.StatusOK || len(existing) == 0 {
+			return HiveUIClientInfo{}, fmt.Errorf("unable to re-read created Keycloak hive UI client")
+		}
+	}
+
+	clientID = existing[0].ID
+	representation.ID = clientID
+	status, _, err = c.doJSON(ctx, http.MethodPut, fmt.Sprintf("%s/admin/realms/%s/clients/%s", c.cfg.BaseURL, c.cfg.Realm, clientID), token, representation, nil)
+	if err != nil {
+		return HiveUIClientInfo{}, err
+	}
+	if status != http.StatusNoContent {
+		return HiveUIClientInfo{}, fmt.Errorf("unexpected Keycloak hive UI client update status %d", status)
+	}
+
+	return HiveUIClientInfo{ClientID: c.cfg.HiveUIClientID, Created: created}, nil
+}
+
 func (c *Client) EnsureBootstrapUser(ctx context.Context) (BootstrapUserInfo, error) {
 	token, err := c.adminToken(ctx)
 	if err != nil {
@@ -276,6 +334,37 @@ func (c *Client) desiredForgejoClient() clientRepresentation {
 		FrontchannelLogout:        true,
 		Attributes: map[string]string{
 			"post.logout.redirect.uris": strings.Join(redirectURIs, "##"),
+		},
+	}
+}
+
+func (c *Client) desiredHiveUIClient() clientRepresentation {
+	baseURL := ""
+	webOrigins := c.cfg.EffectiveHiveUIWebOrigins()
+	redirectURIs := c.cfg.EffectiveHiveUIRedirectURIs()
+	if len(webOrigins) > 0 {
+		baseURL = webOrigins[0]
+	}
+
+	return clientRepresentation{
+		ClientID:                  c.cfg.HiveUIClientID,
+		Name:                      "Hive UI",
+		Description:               "OIDC client for the Hive UI managed by Vinculum.",
+		Enabled:                   true,
+		Protocol:                  "openid-connect",
+		Secret:                    c.cfg.HiveUIClientSecret,
+		PublicClient:              false,
+		StandardFlowEnabled:       true,
+		DirectAccessGrantsEnabled: false,
+		RedirectURIs:              redirectURIs,
+		WebOrigins:                webOrigins,
+		BaseURL:                   baseURL,
+		RootURL:                   baseURL,
+		AdminURL:                  baseURL,
+		FrontchannelLogout:        true,
+		Attributes: map[string]string{
+			"pkce.code.challenge.method": "S256",
+			"post.logout.redirect.uris":  strings.Join(redirectURIs, "##"),
 		},
 	}
 }

@@ -18,8 +18,8 @@ type Config struct {
 func Load() Config {
 	return Config{
 		ForgejoBaseURL:    envOrDefault("FORGEJO_BASE_URL", "http://vinculum-infra-forgejo-http.vinculum-system.svc.cluster.local:3000"),
-		ForgejoAdminUser:  envOrDefault("FORGEJO_ADMIN_USERNAME", "vinculum"),
-		ForgejoAdminPass:  envOrDefault("FORGEJO_ADMIN_PASSWORD", "vinculum"),
+		ForgejoAdminUser:  envOrDefault("FORGEJO_ADMIN_USERNAME", "hive_queen"),
+		ForgejoAdminPass:  envOrDefault("FORGEJO_ADMIN_PASSWORD", "hive_queen"),
 		ForgejoSSHHost:    envOrDefault("FORGEJO_SSH_HOST", "vinculum-infra-forgejo-ssh.vinculum-system.svc.cluster.local"),
 		ForgejoSSHPort:    envOrDefault("FORGEJO_SSH_PORT", "22"),
 		DroneDefaultImage: envOrDefault("DRONE_DEFAULT_IMAGE", "ttl.sh/vinculum-agent:12h"),
