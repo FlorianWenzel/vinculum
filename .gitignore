@@ -6,5 +6,8 @@ dist/
 .tilt-secrets/
 .idea/
 **/node_modules/
+apps/site/.nuxt/
+apps/site/.output/
+apps/site/dist
 helm/**/charts/
 chart-repo/
