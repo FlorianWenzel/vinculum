@@ -6,6 +6,21 @@ namespace="vinculum-system"
 release="vinculum"
 overview_url="http://127.0.0.1:8084/api/overview"
 
+wait_for_url() {
+  local url="$1"
+  local attempts="${2:-60}"
+  local delay="${3:-5}"
+
+  for _ in $(seq 1 "$attempts"); do
+    if curl -fsS "$url" >/tmp/vinculum-overview.json; then
+      return 0
+    fi
+    sleep "$delay"
+  done
+
+  return 1
+}
+
 cleanup() {
   jobs -p | xargs -r kill >/dev/null 2>&1 || true
 }
@@ -45,14 +60,11 @@ echo "Port-forwarding orchestrator API"
 kubectl port-forward -n "$namespace" svc/vinculum-orchestrator 8084:8084 >/tmp/vinculum-orchestrator-port-forward.log 2>&1 &
 
 echo "Waiting for orchestrator overview endpoint"
-for _ in $(seq 1 60); do
-  if curl -fsS "$overview_url" >/tmp/vinculum-overview.json; then
-    break
-  fi
-  sleep 5
-done
-
-curl -fsS "$overview_url" >/tmp/vinculum-overview.json
+if ! wait_for_url "$overview_url" 60 5; then
+  echo "Failed to reach orchestrator overview endpoint"
+  cat /tmp/vinculum-orchestrator-port-forward.log || true
+  exit 1
+fi
 
 echo "Running Hive UI end-to-end smoke test"
 npm --prefix apps/hive-ui ci
