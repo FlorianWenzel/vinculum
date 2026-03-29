@@ -46,12 +46,19 @@ describe('Hive UI mobile-first management', () => {
     cy.request('/api/overview').its('body.requirements').should((items) => {
       expect(items.some((item) => item.spec?.repositoryRef === projectName)).to.eq(true)
     })
+    cy.request('/api/overview').its('body.requirements').then((items) => {
+      const requirement = items.find((item) => item.spec?.repositoryRef === projectName)
+      expect(requirement, 'created requirement').to.exist
+      cy.wrap(requirement.status?.observedTitle || requirement.metadata?.name).as('requirementLabel')
+    })
 
     cy.contains('Tasks').click()
     cy.get('[data-testid="task-project-select"]').click()
     cy.contains('li', projectName).click()
     cy.get('[data-testid="task-requirement-select"]').click()
-    cy.contains('li', requirementTitle).click()
+    cy.get('@requirementLabel').then((requirementLabel) => {
+      cy.contains('li', requirementLabel).click()
+    })
     cy.get('[data-testid="task-name-input"]').clear().type(taskName)
     cy.intercept('POST', '/api/tasks').as('createTask')
     cy.get('[data-testid="create-task-button"]').click()
