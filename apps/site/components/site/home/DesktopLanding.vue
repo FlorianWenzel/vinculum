@@ -1,6 +1,5 @@
 <script setup lang="ts">
 defineProps<{
-  desktopNav: Array<{ label: string; href: string; active?: boolean }>
   droneCards: Array<{ title: string; unit: string; icon: string; description: string; status?: string; fill?: boolean; span?: string }>
   workflowSteps: Array<{ number: string; title: string; text: string; active?: boolean }>
   stackItems: Array<{ number: string; title: string; note: string }>
@@ -9,29 +8,6 @@ defineProps<{
 
 <template>
   <div class="hidden md:block">
-    <nav class="fixed top-0 z-50 w-full border-b border-[#3b4b37]/20 bg-[#131313]/80 shadow-[0_0_20px_rgba(0,255,65,0.05)] backdrop-blur-xl">
-      <div class="flex items-center justify-between px-6 py-4">
-        <div class="font-headline text-2xl font-black tracking-[0.3em] text-[#00ff41] uppercase">VINCULUM</div>
-        <div class="hidden gap-8 md:flex">
-          <a
-            v-for="item in desktopNav"
-            :key="item.label"
-            :href="item.href"
-            class="font-headline border-b-2 pb-1 text-sm tracking-tight uppercase transition-colors"
-            :class="item.active ? 'border-[#00ff41] text-[#00ff41]' : 'border-transparent text-[#84967e] hover:text-[#00ff41]'"
-          >
-            {{ item.label }}
-          </a>
-        </div>
-        <a
-          href="#install"
-          class="bg-primary-container px-6 py-2 font-headline text-sm font-bold tracking-[0.3em] text-on-primary uppercase transition-all duration-100 hover:shadow-[0_0_15px_#00ff41] active:scale-95"
-        >
-          INSTALL
-        </a>
-      </div>
-    </nav>
-
     <main class="overflow-x-hidden pt-24">
       <section class="relative flex min-h-[921px] flex-col items-center justify-center overflow-hidden px-6">
         <div class="mask-radial absolute inset-0 z-0 opacity-20">

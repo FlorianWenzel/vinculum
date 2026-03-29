@@ -1,10 +1,4 @@
 <script setup lang="ts">
-const desktopNav = [
-  { label: 'ROLES', href: '#swarm', active: true },
-  { label: 'ARCHITECTURE', href: '#architecture' },
-  { label: 'DOCS', href: '/docs' }
-]
-
 const droneCards = [
   {
     title: 'Coder',
@@ -141,27 +135,19 @@ const mobileStack = [
   { icon: 'smart_toy', label: 'OpenCode' }
 ]
 
-const footerLinks = [
-  { label: 'DOCS', href: '/docs' },
-  { label: 'DEPLOYMENT', href: '/docs#deployment' },
-  { label: 'MIT LICENSE', href: 'https://github.com/florianwenzel/vinculum/blob/main/LICENSE' }
-]
 </script>
 
 <template>
   <div class="min-h-screen bg-background text-on-background">
     <SiteHomeDesktopLanding
-      :desktop-nav="desktopNav"
       :drone-cards="droneCards"
       :workflow-steps="workflowSteps"
       :stack-items="stackItems"
     />
-    <SiteHomeSiteFooter :footer-links="footerLinks" class="hidden md:block" />
     <SiteHomeMobileLanding
       :mobile-drones="mobileDrones"
       :mobile-workflow="mobileWorkflow"
       :mobile-stack="mobileStack"
-      :footer-links="footerLinks"
     />
   </div>
 </template>

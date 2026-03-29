@@ -109,18 +109,8 @@ const docsSections = [
 </script>
 
 <template>
-  <div class="min-h-screen bg-background text-on-background">
-    <header class="sticky top-0 z-40 border-b border-outline-variant/20 bg-[#131313]/90 backdrop-blur-xl">
-      <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <NuxtLink to="/" class="font-headline text-xl font-black tracking-[0.3em] text-primary-container uppercase">VINCULUM</NuxtLink>
-        <div class="flex items-center gap-6 text-xs tracking-[0.2em] text-outline uppercase">
-          <a href="https://github.com/florianwenzel/vinculum/blob/main/Deployment.md" class="transition-colors hover:text-primary-container">Deployment.md</a>
-          <a href="https://github.com/florianwenzel/vinculum/blob/main/README.md" class="transition-colors hover:text-primary-container">README</a>
-        </div>
-      </div>
-    </header>
-
-    <main class="mx-auto max-w-7xl px-6 py-16 md:py-24">
+  <div class="min-h-screen bg-background pb-20 text-on-background md:pb-0">
+    <main class="mx-auto max-w-7xl px-6 pt-20 pb-16 md:py-24 md:pt-24">
       <section class="grid gap-8 border border-outline-variant/20 bg-surface-container-low p-8 shadow-[0_0_30px_rgba(0,255,65,0.06)] lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.85fr)]">
         <div>
           <div class="mb-5 inline-flex items-center gap-2 border border-primary-container/30 bg-primary-container/5 px-3 py-1 font-label text-[10px] tracking-[0.3em] text-primary-container uppercase">
