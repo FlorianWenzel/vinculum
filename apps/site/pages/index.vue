@@ -161,6 +161,7 @@ const footerLinks = [
       :mobile-drones="mobileDrones"
       :mobile-workflow="mobileWorkflow"
       :mobile-stack="mobileStack"
+      :footer-links="footerLinks"
     />
   </div>
 </template>

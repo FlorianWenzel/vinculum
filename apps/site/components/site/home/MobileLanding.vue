@@ -1,22 +1,106 @@
 <script setup lang="ts">
-defineProps<{
+const props = defineProps<{
   mobileDrones: Array<{ title: string; subtitle: string; icon: string; accent: string; iconColor: string; subtitleColor: string; bars: string[]; dimmed?: boolean; pulse?: boolean }>
   mobileWorkflow: Array<{ number: string; title: string; text: string }>
   mobileStack: Array<{ icon: string; label: string }>
+  footerLinks: Array<{ label: string; href: string }>
 }>()
+
+const menuOpen = ref(false)
+
+const mobileMenuLinks = [
+  { label: 'Home', kind: 'scroll', target: 'top' },
+  { label: 'Drone Roles', kind: 'scroll', target: 'mobile-roles' },
+  { label: 'Workflow', kind: 'scroll', target: 'mobile-workflow' },
+  { label: 'Components', kind: 'scroll', target: 'mobile-components' },
+  { label: 'Install', kind: 'scroll', target: 'mobile-install' },
+  { label: 'Docs', kind: 'route', target: '/docs' }
+] as const
+
+const bottomNavItems = [
+  { icon: 'home', label: 'Home', kind: 'scroll', target: 'top' },
+  { icon: 'smart_toy', label: 'Roles', kind: 'scroll', target: 'mobile-roles' },
+  { icon: 'account_tree', label: 'Docs', kind: 'route', target: '/docs' },
+  { icon: 'memory', label: 'Install', kind: 'scroll', target: 'mobile-install' }
+] as const
+
+function scrollToTarget(target: string) {
+  if (target === 'top') {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    return
+  }
+
+  document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+async function handleNavigation(item: { kind: 'scroll' | 'route'; target: string }) {
+  menuOpen.value = false
+
+  if (item.kind === 'route') {
+    await navigateTo(item.target)
+    return
+  }
+
+  scrollToTarget(item.target)
+}
 </script>
 
 <template>
   <div class="md:hidden overflow-x-hidden bg-background pb-20 text-on-background">
     <header class="fixed top-0 z-50 flex h-14 w-full items-center justify-between bg-gradient-to-b from-[#131313] to-[#1c1b1b] px-4 shadow-[0_0_15px_rgba(0,255,65,0.1)]">
       <div class="flex items-center gap-3">
-        <span class="material-symbols-outlined text-[#00ff41]">menu</span>
+        <button
+          type="button"
+          class="flex items-center justify-center text-[#00ff41]"
+          aria-label="Open mobile menu"
+          @click="menuOpen = !menuOpen"
+        >
+          <span class="material-symbols-outlined">{{ menuOpen ? 'close' : 'menu' }}</span>
+        </button>
         <h1 class="font-headline text-sm font-bold tracking-[0.3em] text-[#00ff41] uppercase">VINCULUM</h1>
       </div>
       <div class="flex items-center gap-4">
         <span class="material-symbols-outlined text-xl text-[#00ff41]">terminal</span>
       </div>
     </header>
+
+    <Transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition duration-150 ease-in"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div v-if="menuOpen" class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" @click="menuOpen = false" />
+    </Transition>
+
+    <Transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="-translate-y-4 opacity-0"
+      enter-to-class="translate-y-0 opacity-100"
+      leave-active-class="transition duration-150 ease-in"
+      leave-from-class="translate-y-0 opacity-100"
+      leave-to-class="-translate-y-4 opacity-0"
+    >
+      <div v-if="menuOpen" class="fixed top-14 right-4 left-4 z-50 border border-outline-variant/30 bg-surface-container-lowest/95 p-4 shadow-[0_0_25px_rgba(0,255,65,0.08)] backdrop-blur-xl">
+        <div class="mb-4 border-b border-outline-variant/20 pb-3 font-label text-[10px] tracking-[0.3em] text-primary-container uppercase">
+          Mobile Navigation
+        </div>
+        <div class="space-y-2">
+          <button
+            v-for="item in mobileMenuLinks"
+            :key="item.label"
+            type="button"
+            class="flex w-full items-center justify-between border border-outline-variant/20 bg-surface-container px-4 py-3 text-left font-headline text-sm font-bold tracking-[0.16em] text-on-surface uppercase"
+            @click="handleNavigation(item)"
+          >
+            <span>{{ item.label }}</span>
+            <span class="material-symbols-outlined text-base text-primary-container">arrow_forward</span>
+          </button>
+        </div>
+      </div>
+    </Transition>
 
     <main class="space-y-8 px-4 pt-14">
       <section class="relative flex flex-col items-center overflow-hidden py-12 text-center">
@@ -45,7 +129,7 @@ defineProps<{
         </div>
       </section>
 
-      <section class="space-y-4">
+      <section id="mobile-roles" class="space-y-4 scroll-mt-20">
         <div class="flex items-baseline justify-between border-b border-outline-variant pb-2">
           <h3 class="font-headline text-lg font-bold tracking-[0.2em] text-primary-container uppercase">DRONE_ROLES</h3>
           <span class="font-label text-[10px] text-outline">PUBLIC</span>
@@ -73,7 +157,7 @@ defineProps<{
         </div>
       </section>
 
-      <section class="space-y-6">
+      <section id="mobile-workflow" class="space-y-6 scroll-mt-20">
         <h3 class="border-b border-outline-variant pb-2 font-headline text-lg font-bold tracking-[0.2em] text-primary-container uppercase">DELIVERY_WORKFLOW</h3>
         <div class="relative grid grid-cols-1 gap-6">
           <div class="absolute top-4 bottom-4 left-[19px] w-px bg-outline-variant/30" />
@@ -89,7 +173,7 @@ defineProps<{
         </div>
       </section>
 
-      <section class="space-y-6 bg-surface-container-low p-6">
+      <section id="mobile-components" class="space-y-6 bg-surface-container-low p-6 scroll-mt-20">
         <h3 class="text-center font-headline text-sm font-bold tracking-[0.2em] text-primary-container uppercase">PLATFORM_COMPONENTS</h3>
         <div class="grid grid-cols-2 gap-px bg-outline-variant/20">
           <div v-for="item in mobileStack" :key="item.label" class="group flex flex-col items-center gap-2 bg-surface-container-low p-4">
@@ -99,7 +183,7 @@ defineProps<{
         </div>
       </section>
 
-      <section id="mobile-install" class="space-y-4">
+      <section id="mobile-install" class="space-y-4 scroll-mt-20">
         <h3 class="border-b border-outline-variant pb-2 font-headline text-lg font-bold tracking-[0.2em] text-primary-container uppercase">INSTALL_WITH_HELM</h3>
         <div class="relative overflow-x-auto border border-outline-variant bg-black p-4 font-mono text-[11px] leading-tight shadow-2xl">
           <div class="absolute top-2 right-2 flex gap-1">
@@ -124,7 +208,17 @@ defineProps<{
         </div>
       </section>
 
-      <footer class="border-t border-outline-variant/20 px-2 pt-8 pb-12 opacity-40">
+      <footer class="border-t border-outline-variant/20 px-2 pt-8 pb-12 opacity-70">
+        <div class="mb-4 flex flex-wrap gap-2">
+          <a
+            v-for="link in props.footerLinks"
+            :key="link.label"
+            :href="link.href"
+            class="border border-outline-variant/20 bg-surface-container px-3 py-2 font-label text-[10px] tracking-[0.2em] text-outline uppercase transition-colors hover:text-primary-container"
+          >
+            {{ link.label }}
+          </a>
+        </div>
         <div class="flex items-center justify-between">
           <span class="font-label text-[9px] tracking-[0.2em] uppercase">Public_Docs_v1</span>
           <span class="font-label text-[9px] tracking-[0.2em] uppercase">MIT LICENSE</span>
@@ -133,18 +227,16 @@ defineProps<{
     </main>
 
     <nav class="safe-bottom fixed bottom-0 left-0 z-50 flex h-16 w-full items-center justify-around bg-[#131313]/90 shadow-[0_-4px_20px_rgba(0,255,65,0.05)] backdrop-blur-md">
-      <div class="flex flex-1 scale-100 flex-col items-center justify-center text-[#00ff41] drop-shadow-[0_0_8px_rgba(0,255,65,0.8)] transition-transform active:scale-110">
-        <span class="material-symbols-outlined">home</span>
-      </div>
-      <div class="flex flex-1 flex-col items-center justify-center text-[#84967e] transition-transform hover:text-[#ebffe2] active:scale-110">
-        <span class="material-symbols-outlined">smart_toy</span>
-      </div>
-      <div class="flex flex-1 flex-col items-center justify-center text-[#84967e] transition-transform hover:text-[#ebffe2] active:scale-110">
-        <span class="material-symbols-outlined">account_tree</span>
-      </div>
-      <div class="flex flex-1 flex-col items-center justify-center text-[#84967e] transition-transform hover:text-[#ebffe2] active:scale-110">
-        <span class="material-symbols-outlined">memory</span>
-      </div>
+      <button
+        v-for="item in bottomNavItems"
+        :key="item.label"
+        type="button"
+        class="flex flex-1 flex-col items-center justify-center text-[#84967e] transition-transform hover:text-[#ebffe2] active:scale-110"
+        @click="handleNavigation(item)"
+      >
+        <span class="material-symbols-outlined" :class="item.label === 'Home' ? 'text-[#00ff41] drop-shadow-[0_0_8px_rgba(0,255,65,0.8)]' : ''">{{ item.icon }}</span>
+        <span class="mt-1 font-label text-[9px] tracking-[0.2em] uppercase">{{ item.label }}</span>
+      </button>
     </nav>
   </div>
 </template>
