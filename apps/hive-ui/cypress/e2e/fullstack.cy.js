@@ -20,6 +20,7 @@ describe('Hive UI mobile-first management', () => {
   it('creates projects, drones, and links them', () => {
     const projectName = unique('project')
     const requirementTitle = `Requirement ${Date.now()}`
+    const taskName = unique('task')
     const droneName = unique('drone')
     const linkName = unique('link')
 
@@ -45,6 +46,18 @@ describe('Hive UI mobile-first management', () => {
     cy.request('/api/overview').its('body.requirements').should((items) => {
       expect(items.some((item) => item.spec?.repositoryRef === projectName)).to.eq(true)
     })
+
+    cy.contains('Tasks').click()
+    cy.get('[data-testid="task-project-select"]').click()
+    cy.contains('li', projectName).click()
+    cy.get('[data-testid="task-requirement-select"]').click()
+    cy.contains('li', requirementTitle).click()
+    cy.get('[data-testid="task-name-input"]').clear().type(taskName)
+    cy.intercept('POST', '/api/tasks').as('createTask')
+    cy.get('[data-testid="create-task-button"]').click()
+    cy.wait('@createTask').its('response.statusCode').should('eq', 200)
+    cy.contains('Task created.').should('be.visible')
+    waitForOverview((body) => body.tasks.some((item) => item.metadata?.name === taskName))
 
     cy.get('[data-testid="nav-row"]').should('exist')
     cy.contains('Drones').click()
@@ -75,6 +88,7 @@ describe('Hive UI mobile-first management', () => {
     cy.request('/api/overview').then(({ body }) => {
       expect(body.repositories.some((item) => item.metadata?.name === projectName)).to.eq(true)
       expect(body.requirements.some((item) => item.spec?.repositoryRef === projectName)).to.eq(true)
+      expect(body.tasks.some((item) => item.metadata?.name === taskName)).to.eq(true)
       expect(body.drones.some((item) => item.metadata?.name === droneName)).to.eq(true)
       expect(body.accesses.some((item) => item.metadata?.name === linkName)).to.eq(true)
     })

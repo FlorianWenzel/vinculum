@@ -11,6 +11,7 @@ import GlassCard from './components/GlassCard.vue'
 const sections = [
   { id: 'projects', label: 'Projects' },
   { id: 'requirements', label: 'Requirements' },
+  { id: 'tasks', label: 'Tasks' },
   { id: 'drones', label: 'Drones' },
   { id: 'links', label: 'Links' },
 ]
@@ -20,7 +21,7 @@ const loading = ref(true)
 const error = ref('')
 const notice = ref('')
 const refreshHandle = ref(null)
-const state = ref({ repositories: [], requirements: [], drones: [], accesses: [] })
+const state = ref({ repositories: [], requirements: [], tasks: [], drones: [], accesses: [], reviews: [], jobs: [] })
 
 const projectForm = ref({ name: 'new-project', description: '', private: true })
 const requirementForm = ref({
@@ -29,6 +30,13 @@ const requirementForm = ref({
   status: 'TODO',
   body: '# Context\n\nDescribe the feature.\n\n# Acceptance Criteria\n\n- Add acceptance criteria',
   dependsOn: '',
+})
+const taskForm = ref({
+  name: 'new-task',
+  repositoryRef: '',
+  requirementRef: '',
+  droneRef: '',
+  prompt: 'Implement the requested change in the repository, keep the diff focused, and leave the branch ready for review.',
 })
 const droneForm = ref({
   name: 'new-drone',
@@ -48,14 +56,23 @@ const droneOptions = computed(() => state.value.drones
   .map((item) => ({ label: item.metadata?.name, value: item.metadata?.name }))
   .sort((a, b) => a.label.localeCompare(b.label)))
 
+const requirementOptions = computed(() => state.value.requirements
+  .map((item) => ({
+    label: item.status?.observedTitle || item.metadata?.name,
+    value: item.metadata?.name,
+  }))
+  .sort((a, b) => a.label.localeCompare(b.label)))
+
 const projects = computed(() => [...state.value.repositories].sort((a, b) => (a.metadata?.name || '').localeCompare(b.metadata?.name || '')))
 const requirements = computed(() => [...state.value.requirements].sort((a, b) => (a.metadata?.name || '').localeCompare(b.metadata?.name || '')))
+const tasks = computed(() => [...state.value.tasks].sort((a, b) => (a.metadata?.name || '').localeCompare(b.metadata?.name || '')))
 const drones = computed(() => [...state.value.drones].sort((a, b) => (a.metadata?.name || '').localeCompare(b.metadata?.name || '')))
 const links = computed(() => [...state.value.accesses].sort((a, b) => (a.metadata?.name || '').localeCompare(b.metadata?.name || '')))
 
 const stats = computed(() => [
   { label: 'Projects', value: projects.value.length },
   { label: 'Requirements', value: requirements.value.length },
+  { label: 'Tasks', value: tasks.value.length },
   { label: 'Drones', value: drones.value.length },
   { label: 'Links', value: links.value.length },
   { label: 'Busy drones', value: drones.value.filter((item) => (item.status?.activeTasks ?? 0) > 0).length },
@@ -162,6 +179,27 @@ async function createRequirement() {
     requirementForm.value.status = 'TODO'
     requirementForm.value.body = '# Context\n\nDescribe the feature.\n\n# Acceptance Criteria\n\n- Add acceptance criteria'
     requirementForm.value.dependsOn = ''
+    await load()
+  } catch (err) {
+    error.value = err.message
+  }
+}
+
+async function createTask() {
+  resetNotice()
+  try {
+    await post('/api/tasks', {
+      name: taskForm.value.name,
+      repositoryRef: taskForm.value.repositoryRef,
+      requirementRef: taskForm.value.requirementRef || undefined,
+      droneRef: taskForm.value.droneRef || undefined,
+      prompt: taskForm.value.prompt,
+    })
+    notice.value = 'Task created.'
+    taskForm.value.name = 'new-task'
+    taskForm.value.requirementRef = ''
+    taskForm.value.droneRef = ''
+    taskForm.value.prompt = 'Implement the requested change in the repository, keep the diff focused, and leave the branch ready for review.'
     await load()
   } catch (err) {
     error.value = err.message
@@ -279,6 +317,45 @@ onBeforeUnmount(() => {
 
             <article v-if="!requirements.length" class="item-card">
               <p class="text-slate-300">No requirements created yet.</p>
+            </article>
+          </div>
+        </GlassCard>
+      </section>
+
+      <section v-else-if="activeSection === 'tasks'" class="section-grid">
+        <GlassCard>
+          <template #title>Create task</template>
+          <div class="toolbar">
+            <label class="text-sm text-slate-300">Name<InputText v-model="taskForm.name" class="soft-input" data-testid="task-name-input" /></label>
+            <label class="text-sm text-slate-300">Repository<Dropdown v-model="taskForm.repositoryRef" :options="projectOptions" option-label="label" option-value="value" class="soft-input" data-testid="task-project-select" /></label>
+            <label class="text-sm text-slate-300">Requirement<Dropdown v-model="taskForm.requirementRef" :options="requirementOptions" option-label="label" option-value="value" placeholder="Optional" show-clear class="soft-input" data-testid="task-requirement-select" /></label>
+            <label class="text-sm text-slate-300">Assigned drone<Dropdown v-model="taskForm.droneRef" :options="droneOptions" option-label="label" option-value="value" placeholder="Optional" show-clear class="soft-input" data-testid="task-drone-select" /></label>
+            <label class="text-sm text-slate-300">Prompt<Textarea v-model="taskForm.prompt" rows="6" class="soft-input" data-testid="task-prompt-input" /></label>
+            <Button type="button" label="Create task" class="w-full" data-testid="create-task-button" @click="createTask" />
+          </div>
+        </GlassCard>
+
+        <GlassCard>
+          <template #title>Tasks</template>
+          <div class="section-grid">
+            <article v-for="task in tasks" :key="task.metadata.uid" class="item-card" :data-testid="`task-card-${task.metadata.name}`">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <h3 class="text-lg font-semibold text-slate-50">{{ task.metadata.name }}</h3>
+                  <p class="text-sm text-slate-400">{{ task.spec.repositoryRef }}<span v-if="task.spec.requirementRef"> · {{ task.spec.requirementRef }}</span></p>
+                </div>
+                <Tag :value="task.status?.phase || 'Planned'" :severity="task.status?.phase === 'Merged' ? 'success' : task.status?.phase === 'Failed' ? 'danger' : 'info'" />
+              </div>
+              <p class="mt-3 text-sm leading-6 text-slate-300">{{ task.status?.summary || task.spec.prompt }}</p>
+              <div class="chip-row mt-4">
+                <Tag :value="`Role: ${task.spec.role || 'coder'}`" severity="secondary" />
+                <Tag :value="`Drone: ${task.spec.droneRef || task.status?.assignedDrone || 'unassigned'}`" severity="secondary" />
+              </div>
+              <p v-if="task.status?.pullRequestUrl" class="mt-4 break-all text-xs text-emerald-300">PR: {{ task.status.pullRequestUrl }}</p>
+            </article>
+
+            <article v-if="!tasks.length" class="item-card">
+              <p class="text-slate-300">No tasks created yet.</p>
             </article>
           </div>
         </GlassCard>
