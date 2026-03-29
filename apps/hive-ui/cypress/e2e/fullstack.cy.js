@@ -2,6 +2,20 @@ function unique(prefix) {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`
 }
 
+function waitForOverview(predicate, attempts = 60) {
+  return cy.request('/api/overview').then(({ body }) => {
+    if (predicate(body)) {
+      return body
+    }
+
+    if (attempts <= 1) {
+      throw new Error('Timed out waiting for overview state to match expected condition')
+    }
+
+    return cy.wait(2000).then(() => waitForOverview(predicate, attempts - 1))
+  })
+}
+
 describe('Hive UI mobile-first management', () => {
   it('creates projects, drones, and links them', () => {
     const projectName = unique('project')
@@ -17,6 +31,7 @@ describe('Hive UI mobile-first management', () => {
     cy.get('[data-testid="create-project-button"]').click()
     cy.wait('@createProject').its('response.statusCode').should('eq', 200)
     cy.contains('Project created.').should('be.visible')
+    waitForOverview((body) => body.repositories.some((item) => item.metadata?.name === projectName && item.status?.phase === 'Ready'))
 
     cy.contains('Requirements').click()
     cy.get('[data-testid="requirement-project-select"]').click()
@@ -39,6 +54,7 @@ describe('Hive UI mobile-first management', () => {
     cy.get('[data-testid="create-drone-button"]').click()
     cy.wait('@createDrone').its('response.statusCode').should('eq', 200)
     cy.contains('Drone created.').should('be.visible')
+    waitForOverview((body) => body.drones.some((item) => item.metadata?.name === droneName && item.status?.forgejoReady === true))
 
     cy.contains('Projects').click()
     cy.get(`[data-testid="project-link-${projectName}"]`).click()
@@ -54,6 +70,7 @@ describe('Hive UI mobile-first management', () => {
     cy.get('[data-testid="create-link-button"]').click()
     cy.wait('@createLink').its('response.statusCode').should('eq', 200)
     cy.contains('Link created.').should('be.visible')
+    waitForOverview((body) => body.accesses.some((item) => item.metadata?.name === linkName && item.status?.phase === 'Ready'))
 
     cy.request('/api/overview').then(({ body }) => {
       expect(body.repositories.some((item) => item.metadata?.name === projectName)).to.eq(true)
