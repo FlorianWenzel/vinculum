@@ -21,6 +21,7 @@ describe('Hive UI mobile-first management', () => {
     const projectName = unique('project')
     const requirementTitle = `Requirement ${Date.now()}`
     const taskName = unique('task')
+    const reviewName = unique('review')
     const droneName = unique('drone')
     const linkName = unique('link')
 
@@ -66,6 +67,19 @@ describe('Hive UI mobile-first management', () => {
     cy.contains('Task created.').should('be.visible')
     waitForOverview((body) => body.tasks.some((item) => item.metadata?.name === taskName))
 
+    cy.contains('Reviews').click()
+    cy.get('[data-testid="review-project-select"]').click()
+    cy.contains('li', projectName).click()
+    cy.get('[data-testid="review-task-select"]').click()
+    cy.contains('li', taskName).click()
+    cy.get('[data-testid="review-name-input"]').clear().type(reviewName)
+    cy.get('[data-testid="review-summary-input"]').clear().type('Manual review created from the smoke test.')
+    cy.intercept('POST', '/api/reviews').as('createReview')
+    cy.get('[data-testid="create-review-button"]').click()
+    cy.wait('@createReview').its('response.statusCode').should('eq', 200)
+    cy.contains('Review created.').should('be.visible')
+    waitForOverview((body) => body.reviews.some((item) => item.metadata?.name === reviewName))
+
     cy.get('[data-testid="nav-row"]').should('exist')
     cy.contains('Drones').click()
     cy.get('[data-testid="drone-name-input"]').clear().type(droneName)
@@ -96,6 +110,7 @@ describe('Hive UI mobile-first management', () => {
       expect(body.repositories.some((item) => item.metadata?.name === projectName)).to.eq(true)
       expect(body.requirements.some((item) => item.spec?.repositoryRef === projectName)).to.eq(true)
       expect(body.tasks.some((item) => item.metadata?.name === taskName)).to.eq(true)
+      expect(body.reviews.some((item) => item.metadata?.name === reviewName)).to.eq(true)
       expect(body.drones.some((item) => item.metadata?.name === droneName)).to.eq(true)
       expect(body.accesses.some((item) => item.metadata?.name === linkName)).to.eq(true)
     })
