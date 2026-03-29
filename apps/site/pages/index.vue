@@ -1,122 +1,166 @@
 <script setup lang="ts">
-const pillars = [
+const desktopNav = [
+  { label: 'ROLES', href: '#swarm', active: true },
+  { label: 'ARCHITECTURE', href: '#architecture' },
+  { label: 'DOCS', href: '/docs' }
+]
+
+const droneCards = [
   {
-    title: 'Autonomous Delivery Loops',
-    text: 'Coder, reviewer, tester, and deployer drones work through requirements, implementation, review, and release as durable Kubernetes workloads.'
+    title: 'Coder',
+    unit: '0x01',
+    icon: 'code_blocks',
+    description:
+      'Implements features, updates code paths, and writes the tests needed to move a task forward.',
+    status: 'STATUS: IMPLEMENTING',
+    fill: true,
+    span: 'md:col-span-2'
   },
   {
-    title: 'Cluster-Native Control Plane',
-    text: 'The orchestrator owns CRDs, schedules drone jobs, tracks task state, and exposes an API and Hive UI for operational visibility.'
+    title: 'Reviewer',
+    unit: '0x02',
+    icon: 'fact_check',
+    description:
+      'Checks correctness, architecture, security, and change quality before work is approved.',
+    fill: false,
+    span: ''
   },
   {
-    title: 'Built-In Platform Stack',
-    text: 'Forgejo, Keycloak, PostgreSQL, bootstrap automation, and Helm packaging ship together so a clean cluster can become a working development platform quickly.'
+    title: 'Tester',
+    unit: '0x03',
+    icon: 'biotech',
+    description:
+      'Runs validation steps and test workflows against new iterations and integration points.',
+    fill: false,
+    span: ''
   }
 ]
 
-const surfaces = [
-  { label: 'Hive UI', href: 'https://app.vincula.dev', note: 'Control surface for drones, repositories, tasks, and reviews.' },
-  { label: 'Vinculum Code', href: 'https://git.vincula.dev', note: 'Forgejo-based code forge with OIDC and project automation.' },
-  { label: 'Identity', href: 'https://id.vincula.dev', note: 'Keycloak realm used for browser auth and service integration.' }
+const workflowSteps = [
+  {
+    number: '01',
+    title: 'Requirements',
+    text: 'Capture product intent and acceptance criteria'
+  },
+  {
+    number: '02',
+    title: 'Planning',
+    text: 'Break work into tasks and assign drones'
+  },
+  {
+    number: '03',
+    title: 'Execution',
+    text: 'Run implementation, review, and test loops',
+    active: true
+  },
+  {
+    number: '04',
+    title: 'Release',
+    text: 'Promote validated changes toward deployment'
+  }
 ]
 
-const docs = [
-  { title: 'Deployment Model', path: '/docs#deployment', text: 'Publishing flow, GHCR images, OCI Helm charts, and GitHub Actions behavior.' },
-  { title: 'Operational Reset', path: '/docs#operations', text: 'Cluster reset, reinstall expectations, ingress, and Cloudflare tunnel placement.' },
-  { title: 'Architecture Guide', path: '/docs#architecture', text: 'How the operator, infrastructure bootstrap, drone runtime, and UI fit together.' }
+const mobileDrones = [
+  {
+    title: 'CODER_DRONE',
+    subtitle: 'Implementing changes',
+    icon: 'code',
+    accent: 'border-primary-container',
+    iconColor: 'text-primary-container',
+    subtitleColor: 'text-tertiary-fixed-dim',
+    bars: ['bg-primary-container', 'bg-primary-container/30', 'bg-primary-container/30'],
+    dimmed: false
+  },
+  {
+    title: 'REVIEWER_UNIT',
+    subtitle: 'Checking quality',
+    icon: 'visibility',
+    accent: 'border-primary-container',
+    iconColor: 'text-primary-container',
+    subtitleColor: 'text-tertiary-fixed-dim',
+    bars: ['bg-primary-container', 'bg-primary-container', 'bg-primary-container/30'],
+    dimmed: false
+  },
+  {
+    title: 'TESTER_PROTOCOL',
+    subtitle: 'Validation queue',
+    icon: 'rule',
+    accent: 'border-secondary-container',
+    iconColor: 'text-secondary',
+    subtitleColor: 'text-outline',
+    bars: ['bg-outline/30', 'bg-outline/30', 'bg-outline/30'],
+    dimmed: true
+  },
+  {
+    title: 'DEPLOYER_CORE',
+    subtitle: 'Preparing release',
+    icon: 'rocket_launch',
+    accent: 'border-primary-container',
+    iconColor: 'text-primary-container',
+    subtitleColor: 'text-tertiary-fixed-dim',
+    bars: ['bg-primary-container', 'bg-primary-container', 'bg-primary-container'],
+    dimmed: false,
+    pulse: true
+  }
+]
+
+const mobileWorkflow = [
+  {
+    number: '01',
+    title: 'Requirements',
+    text: 'Capture product intent, acceptance criteria, and constraints through the UI or API.'
+  },
+  {
+    number: '02',
+    title: 'Task Planning',
+    text: 'Break requirements into technical tasks and assign drones with the right role and access.'
+  },
+  {
+    number: '03',
+    title: 'Execution',
+    text: 'Run isolated drone workloads for coding, review, testing, and related automation loops.'
+  },
+  {
+    number: '04',
+    title: 'Review & Release',
+    text: 'Use review decisions and deployment workflows to move validated changes toward production.'
+  }
+]
+
+const stackItems = [
+  { number: '01', title: 'Kubernetes Native', note: 'Orchestration' },
+  { number: '02', title: 'Forgejo & Vinculum Code', note: 'Git Platform' },
+  { number: '03', title: 'Keycloak Identity', note: 'Access Control' },
+  { number: '04', title: 'Go / OpenCode', note: 'Core Engine' }
+]
+
+const mobileStack = [
+  { icon: 'hub', label: 'Kubernetes' },
+  { icon: 'account_tree', label: 'Forgejo' },
+  { icon: 'database', label: 'PostgreSQL' },
+  { icon: 'smart_toy', label: 'OpenCode' }
+]
+
+const footerLinks = [
+  { label: 'DOCS', href: '/docs' },
+  { label: 'DEPLOYMENT', href: '/docs#deployment' },
+  { label: 'MIT LICENSE', href: 'https://github.com/florianwenzel/vinculum/blob/main/LICENSE' }
 ]
 </script>
 
 <template>
-  <div class="site-shell">
-    <section class="hero">
-      <div class="hero__nav">
-        <div>
-          <p class="eyebrow">Vinculum</p>
-          <p class="hero__tag">Autonomous software delivery on Kubernetes</p>
-        </div>
-        <nav>
-          <a href="/docs">Docs</a>
-          <a href="https://github.com/florianwenzel/vinculum">Source</a>
-        </nav>
-      </div>
-
-      <div class="hero__content">
-        <div class="hero__copy">
-          <p class="kicker">Collective orchestration for real repositories</p>
-          <h1>Turn requirements into reviewed, tested, and deployed software.</h1>
-          <p class="lead">
-            Vinculum combines drone workers, a Kubernetes operator, built-in identity,
-            a Forgejo control surface, and deployable Helm charts into one cluster-native platform.
-          </p>
-          <div class="hero__actions">
-            <a class="button button--primary" href="/docs">Read the docs</a>
-            <a class="button button--ghost" href="https://git.vincula.dev">Open Vinculum Code</a>
-          </div>
-        </div>
-
-        <div class="hero__panel">
-          <span class="panel__title">Runtime surfaces</span>
-          <ul>
-            <li v-for="surface in surfaces" :key="surface.label">
-              <a :href="surface.href">{{ surface.label }}</a>
-              <span>{{ surface.note }}</span>
-            </li>
-          </ul>
-        </div>
-      </div>
-    </section>
-
-    <section class="section section--tight">
-      <div class="section__header">
-        <p class="eyebrow">Platform</p>
-        <h2>Purpose-built for agent swarms, not single-shot demos.</h2>
-      </div>
-      <div class="card-grid card-grid--three">
-        <article v-for="pillar in pillars" :key="pillar.title" class="card">
-          <h3>{{ pillar.title }}</h3>
-          <p>{{ pillar.text }}</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section__header">
-        <p class="eyebrow">Workflow</p>
-        <h2>One platform, four persistent layers.</h2>
-      </div>
-      <div class="timeline">
-        <div class="timeline__item">
-          <strong>1. Requirements and planning</strong>
-          <p>Requirements become durable resources instead of chat history, so the operator can schedule, review, and revisit work later.</p>
-        </div>
-        <div class="timeline__item">
-          <strong>2. Drone execution</strong>
-          <p>Workers run in isolated pods with mounted instructions, auth, and repository access scoped through Kubernetes objects.</p>
-        </div>
-        <div class="timeline__item">
-          <strong>3. Platform bootstrap</strong>
-          <p>Vinculum Infra reconciles Keycloak and Forgejo so identity, organizations, and OIDC wiring come up with the stack.</p>
-        </div>
-        <div class="timeline__item">
-          <strong>4. Ship and operate</strong>
-          <p>Helm charts, GHCR images, and cluster ingress make the stack installable, reproducible, and externally reachable.</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="section section--tight">
-      <div class="section__header">
-        <p class="eyebrow">Docs</p>
-        <h2>Start with the operational model.</h2>
-      </div>
-      <div class="card-grid">
-        <article v-for="item in docs" :key="item.title" class="card card--link">
-          <h3>{{ item.title }}</h3>
-          <p>{{ item.text }}</p>
-          <NuxtLink :to="item.path">Open section</NuxtLink>
-        </article>
-      </div>
-    </section>
+  <div class="min-h-screen bg-background text-on-background">
+    <SiteHomeDesktopLanding
+      :desktop-nav="desktopNav"
+      :drone-cards="droneCards"
+      :workflow-steps="workflowSteps"
+      :stack-items="stackItems"
+    />
+    <SiteHomeSiteFooter :footer-links="footerLinks" class="hidden md:block" />
+    <SiteHomeMobileLanding
+      :mobile-drones="mobileDrones"
+      :mobile-workflow="mobileWorkflow"
+      :mobile-stack="mobileStack"
+    />
   </div>
 </template>

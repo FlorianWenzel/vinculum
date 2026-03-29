@@ -11,3 +11,4 @@ apps/site/.output/
 apps/site/dist
 helm/**/charts/
 chart-repo/
+docs/local-ops-notes.md
