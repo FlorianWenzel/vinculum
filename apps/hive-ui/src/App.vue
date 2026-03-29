@@ -148,6 +148,17 @@ async function post(path, payload) {
   return text ? JSON.parse(text) : {}
 }
 
+async function patch(path, payload) {
+  const res = await fetch(path, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const text = await res.text()
+  if (!res.ok) throw new Error(text || `Request failed: ${res.status}`)
+  return text ? JSON.parse(text) : {}
+}
+
 async function createProject() {
   resetNotice()
   try {
@@ -237,6 +248,17 @@ async function createReview() {
     reviewForm.value.reviewerDroneRef = ''
     reviewForm.value.verdict = 'ChangesRequested'
     reviewForm.value.summary = 'Manual review: changes are needed before approval.'
+    await load()
+  } catch (err) {
+    error.value = err.message
+  }
+}
+
+async function assignTask(taskName, droneRef) {
+  resetNotice()
+  try {
+    await patch('/api/tasks', { name: taskName, droneRef })
+    notice.value = `Task ${taskName} assigned.`
     await load()
   } catch (err) {
     error.value = err.message
@@ -387,6 +409,21 @@ onBeforeUnmount(() => {
               <div class="chip-row mt-4">
                 <Tag :value="`Role: ${task.spec.role || 'coder'}`" severity="secondary" />
                 <Tag :value="`Drone: ${task.spec.droneRef || task.status?.assignedDrone || 'unassigned'}`" severity="secondary" />
+              </div>
+              <div class="mt-4 flex flex-col gap-3">
+                <label class="text-sm text-slate-300">
+                  Assign drone
+                  <Dropdown
+                    :model-value="task.spec.droneRef || task.status?.assignedDrone || ''"
+                    :options="droneOptions"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="Select drone"
+                    class="soft-input"
+                    :data-testid="`task-assign-select-${task.metadata.name}`"
+                    @update:model-value="(value) => assignTask(task.metadata.name, value)"
+                  />
+                </label>
               </div>
               <p v-if="task.status?.pullRequestUrl" class="mt-4 break-all text-xs text-emerald-300">PR: {{ task.status.pullRequestUrl }}</p>
             </article>
