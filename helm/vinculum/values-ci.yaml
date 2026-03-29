@@ -1,0 +1,5 @@
+hiveUI:
+  enabled: false
+
+website:
+  enabled: false
