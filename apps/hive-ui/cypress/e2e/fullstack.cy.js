@@ -68,6 +68,9 @@ describe('Hive UI mobile-first management', () => {
     cy.contains('Task created.').should('be.visible')
     waitForOverview((body) => body.tasks.some((item) => item.metadata?.name === taskName))
 
+    cy.contains('Requirements').click()
+    cy.get('[data-testid^="requirement-tasks-"]').should('contain.text', taskName)
+
     cy.get('[data-testid="nav-row"]').should('exist')
     cy.contains('Drones').click()
     cy.get('[data-testid="drone-name-input"]').clear().type(droneName)

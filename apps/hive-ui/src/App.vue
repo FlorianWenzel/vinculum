@@ -112,6 +112,10 @@ function droneLinks(droneName) {
   return links.value.filter((item) => item.spec?.droneRef === droneName)
 }
 
+function requirementTasks(requirementName) {
+  return tasks.value.filter((item) => item.spec?.requirementRef === requirementName)
+}
+
 function taskReviews(taskName) {
   return reviews.value.filter((item) => item.spec?.taskRef === taskName)
 }
@@ -405,6 +409,18 @@ onBeforeUnmount(() => {
               <div class="chip-row mt-4">
                 <Tag v-for="dep in requirement.status?.observedDependsOn || []" :key="dep" :value="dep" severity="secondary" />
                 <Tag v-if="!(requirement.status?.observedDependsOn || []).length" value="No dependencies" severity="secondary" />
+              </div>
+              <div class="mt-4 space-y-2">
+                <p class="muted text-xs uppercase tracking-[0.2em]">Derived tasks</p>
+                <div class="chip-row" :data-testid="`requirement-tasks-${requirement.metadata.name}`">
+                  <Tag
+                    v-for="task in requirementTasks(requirement.metadata.name)"
+                    :key="task.metadata?.uid || task.metadata?.name"
+                    :value="`${task.metadata?.name}: ${task.status?.phase || 'Planned'}`"
+                    severity="info"
+                  />
+                  <Tag v-if="!requirementTasks(requirement.metadata.name).length" value="No tasks derived yet" severity="secondary" />
+                </div>
               </div>
             </article>
 
