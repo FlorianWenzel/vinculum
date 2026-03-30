@@ -141,6 +141,15 @@ function setDrone(name) {
   activeSection.value = 'links'
 }
 
+function prepareReview(task) {
+  reviewForm.value.repositoryRef = task.spec?.repositoryRef || ''
+  reviewForm.value.taskRef = task.metadata?.name || ''
+  reviewForm.value.reviewerDroneRef = task.spec?.droneRef || ''
+  reviewForm.value.name = `${task.metadata?.name || 'task'}-review`
+  reviewForm.value.summary = `Manual review for ${task.metadata?.name || 'task'}.`
+  activeSection.value = 'reviews'
+}
+
 function resetNotice() {
   error.value = ''
   notice.value = ''
@@ -449,6 +458,14 @@ onBeforeUnmount(() => {
                     @update:model-value="(value) => assignTask(task.metadata.name, value)"
                   />
                 </label>
+                <Button
+                  type="button"
+                  label="Open review form"
+                  severity="secondary"
+                  outlined
+                  :data-testid="`task-open-review-${task.metadata.name}`"
+                  @click="prepareReview(task)"
+                />
               </div>
               <div v-if="taskJobs(task.metadata.name).length || taskReviews(task.metadata.name).length" class="mt-4 space-y-2">
                 <p class="muted text-xs uppercase tracking-[0.2em]">Execution</p>
@@ -467,6 +484,9 @@ onBeforeUnmount(() => {
                   />
                 </div>
               </div>
+              <p v-if="task.status?.phase === 'ChangesRequested'" class="mt-4 text-xs text-amber-300">Review feedback requested additional changes.</p>
+              <p v-else-if="task.status?.phase === 'Approved'" class="mt-4 text-xs text-emerald-300">Review approved this task for merge or rollout.</p>
+              <p v-else-if="task.status?.phase === 'Blocked'" class="mt-4 text-xs text-red-300">Task is blocked and needs intervention before continuing.</p>
               <p v-if="task.status?.pullRequestUrl" class="mt-4 break-all text-xs text-emerald-300">PR: {{ task.status.pullRequestUrl }}</p>
             </article>
 

@@ -99,6 +99,7 @@ describe('Hive UI mobile-first management', () => {
     cy.wait('@createReview').its('response.statusCode').should('eq', 200)
     cy.contains('Review created.').should('be.visible')
     waitForOverview((body) => body.reviews.some((item) => item.metadata?.name === reviewName && item.spec?.reviewerDroneRef === droneName))
+    waitForOverview((body) => body.tasks.some((item) => item.metadata?.name === taskName && item.status?.phase === 'ChangesRequested'))
 
     cy.contains('Projects').click()
     cy.get(`[data-testid="project-link-${projectName}"]`).click()
@@ -115,8 +116,12 @@ describe('Hive UI mobile-first management', () => {
     cy.wait('@createLink').its('response.statusCode').should('eq', 200)
     cy.contains('Link created.').should('be.visible')
     waitForOverview((body) => body.accesses.some((item) => item.metadata?.name === linkName && item.status?.phase === 'Ready'))
-    waitForOverview((body) => body.tasks.some((item) => item.metadata?.name === taskName && item.status?.phase && item.status.phase !== 'Planned'))
+    waitForOverview((body) => body.tasks.some((item) => item.metadata?.name === taskName && item.status?.phase === 'ChangesRequested'))
     waitForOverview((body) => body.jobs.some((item) => item.metadata?.labels?.['vinculum.dev/taskrun'] === taskName))
+
+    cy.contains('Tasks').click()
+    cy.get(`[data-testid="task-card-${taskName}"]`).should('contain.text', 'ChangesRequested')
+    cy.get(`[data-testid="task-card-${taskName}"]`).should('contain.text', 'Review feedback requested additional changes.')
 
     cy.contains('Jobs').click()
     cy.contains('[data-testid^="job-card-"]', taskName, { timeout: 10000 }).should('exist')
@@ -124,7 +129,7 @@ describe('Hive UI mobile-first management', () => {
     cy.request('/api/overview').then(({ body }) => {
       expect(body.repositories.some((item) => item.metadata?.name === projectName)).to.eq(true)
       expect(body.requirements.some((item) => item.spec?.repositoryRef === projectName)).to.eq(true)
-      expect(body.tasks.some((item) => item.metadata?.name === taskName && item.spec?.droneRef === droneName)).to.eq(true)
+      expect(body.tasks.some((item) => item.metadata?.name === taskName && item.spec?.droneRef === droneName && item.status?.phase === 'ChangesRequested')).to.eq(true)
       expect(body.jobs.some((item) => item.metadata?.labels?.['vinculum.dev/taskrun'] === taskName)).to.eq(true)
       expect(body.reviews.some((item) => item.metadata?.name === reviewName && item.spec?.reviewerDroneRef === droneName)).to.eq(true)
       expect(body.drones.some((item) => item.metadata?.name === droneName)).to.eq(true)
