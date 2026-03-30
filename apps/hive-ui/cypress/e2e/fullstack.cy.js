@@ -116,11 +116,16 @@ describe('Hive UI mobile-first management', () => {
     cy.contains('Link created.').should('be.visible')
     waitForOverview((body) => body.accesses.some((item) => item.metadata?.name === linkName && item.status?.phase === 'Ready'))
     waitForOverview((body) => body.tasks.some((item) => item.metadata?.name === taskName && item.status?.phase && item.status.phase !== 'Planned'))
+    waitForOverview((body) => body.jobs.some((item) => item.metadata?.labels?.['vinculum.dev/taskrun'] === taskName))
+
+    cy.contains('Jobs').click()
+    cy.get(`[data-testid="job-card-${taskName}"]`, { timeout: 10000 }).should('exist')
 
     cy.request('/api/overview').then(({ body }) => {
       expect(body.repositories.some((item) => item.metadata?.name === projectName)).to.eq(true)
       expect(body.requirements.some((item) => item.spec?.repositoryRef === projectName)).to.eq(true)
       expect(body.tasks.some((item) => item.metadata?.name === taskName && item.spec?.droneRef === droneName)).to.eq(true)
+      expect(body.jobs.some((item) => item.metadata?.labels?.['vinculum.dev/taskrun'] === taskName)).to.eq(true)
       expect(body.reviews.some((item) => item.metadata?.name === reviewName && item.spec?.reviewerDroneRef === droneName)).to.eq(true)
       expect(body.drones.some((item) => item.metadata?.name === droneName)).to.eq(true)
       expect(body.accesses.some((item) => item.metadata?.name === linkName)).to.eq(true)

@@ -12,6 +12,7 @@ const sections = [
   { id: 'projects', label: 'Projects' },
   { id: 'requirements', label: 'Requirements' },
   { id: 'tasks', label: 'Tasks' },
+  { id: 'jobs', label: 'Jobs' },
   { id: 'reviews', label: 'Reviews' },
   { id: 'drones', label: 'Drones' },
   { id: 'links', label: 'Links' },
@@ -79,6 +80,7 @@ const taskOptions = computed(() => state.value.tasks
 const projects = computed(() => [...state.value.repositories].sort((a, b) => (a.metadata?.name || '').localeCompare(b.metadata?.name || '')))
 const requirements = computed(() => [...state.value.requirements].sort((a, b) => (a.metadata?.name || '').localeCompare(b.metadata?.name || '')))
 const tasks = computed(() => [...state.value.tasks].sort((a, b) => (a.metadata?.name || '').localeCompare(b.metadata?.name || '')))
+const jobs = computed(() => [...state.value.jobs].sort((a, b) => (a.metadata?.name || '').localeCompare(b.metadata?.name || '')))
 const reviews = computed(() => [...state.value.reviews].sort((a, b) => (a.metadata?.name || '').localeCompare(b.metadata?.name || '')))
 const drones = computed(() => [...state.value.drones].sort((a, b) => (a.metadata?.name || '').localeCompare(b.metadata?.name || '')))
 const links = computed(() => [...state.value.accesses].sort((a, b) => (a.metadata?.name || '').localeCompare(b.metadata?.name || '')))
@@ -87,6 +89,7 @@ const stats = computed(() => [
   { label: 'Projects', value: projects.value.length },
   { label: 'Requirements', value: requirements.value.length },
   { label: 'Tasks', value: tasks.value.length },
+  { label: 'Jobs', value: jobs.value.length },
   { label: 'Reviews', value: reviews.value.length },
   { label: 'Drones', value: drones.value.length },
   { label: 'Links', value: links.value.length },
@@ -122,6 +125,10 @@ function jobPhase(job) {
   if ((job?.status?.failed ?? 0) > 0) return 'Failed'
   if ((job?.status?.active ?? 0) > 0) return 'Running'
   return 'Pending'
+}
+
+function jobKind(job) {
+  return job?.metadata?.labels?.['vinculum.dev/job-kind'] || 'task'
 }
 
 function setProject(name) {
@@ -506,6 +513,31 @@ onBeforeUnmount(() => {
                 </div>
               </article>
             </div>
+        </GlassCard>
+      </section>
+
+      <section v-else-if="activeSection === 'jobs'" class="section-grid">
+        <GlassCard>
+          <template #title>Jobs</template>
+          <div class="section-grid">
+            <article v-for="job in jobs" :key="job.metadata.uid" class="item-card" :data-testid="`job-card-${job.metadata.name}`">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <h3 class="text-lg font-semibold text-slate-50">{{ job.metadata.name }}</h3>
+                  <p class="text-sm text-slate-400">{{ job.metadata.labels?.['vinculum.dev/taskrun'] || 'no-task' }} · {{ jobKind(job) }}</p>
+                </div>
+                <Tag :value="jobPhase(job)" :severity="jobPhase(job) === 'Succeeded' ? 'success' : jobPhase(job) === 'Failed' ? 'danger' : 'info'" />
+              </div>
+              <div class="chip-row mt-4">
+                <Tag :value="`Task: ${job.metadata.labels?.['vinculum.dev/taskrun'] || 'n/a'}`" severity="secondary" />
+                <Tag :value="`Drone: ${job.metadata.labels?.['vinculum.dev/drone'] || 'n/a'}`" severity="secondary" />
+              </div>
+            </article>
+
+            <article v-if="!jobs.length" class="item-card">
+              <p class="text-slate-300">No jobs created yet.</p>
+            </article>
+          </div>
         </GlassCard>
       </section>
 
