@@ -115,6 +115,7 @@ describe('Hive UI mobile-first management', () => {
     cy.wait('@createLink').its('response.statusCode').should('eq', 200)
     cy.contains('Link created.').should('be.visible')
     waitForOverview((body) => body.accesses.some((item) => item.metadata?.name === linkName && item.status?.phase === 'Ready'))
+    waitForOverview((body) => body.tasks.some((item) => item.metadata?.name === taskName && item.status?.phase && item.status.phase !== 'Planned'))
 
     cy.request('/api/overview').then(({ body }) => {
       expect(body.repositories.some((item) => item.metadata?.name === projectName)).to.eq(true)

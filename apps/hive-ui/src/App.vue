@@ -109,6 +109,21 @@ function droneLinks(droneName) {
   return links.value.filter((item) => item.spec?.droneRef === droneName)
 }
 
+function taskReviews(taskName) {
+  return reviews.value.filter((item) => item.spec?.taskRef === taskName)
+}
+
+function taskJobs(taskName) {
+  return (state.value.jobs || []).filter((item) => item.metadata?.labels?.['vinculum.dev/taskrun'] === taskName)
+}
+
+function jobPhase(job) {
+  if ((job?.status?.succeeded ?? 0) > 0) return 'Succeeded'
+  if ((job?.status?.failed ?? 0) > 0) return 'Failed'
+  if ((job?.status?.active ?? 0) > 0) return 'Running'
+  return 'Pending'
+}
+
 function setProject(name) {
   linkForm.value.repositoryRef = name
   activeSection.value = 'links'
@@ -409,6 +424,9 @@ onBeforeUnmount(() => {
               <div class="chip-row mt-4">
                 <Tag :value="`Role: ${task.spec.role || 'coder'}`" severity="secondary" />
                 <Tag :value="`Drone: ${task.spec.droneRef || task.status?.assignedDrone || 'unassigned'}`" severity="secondary" />
+                <Tag v-if="task.status?.jobName" :value="`Job: ${task.status.jobName}`" severity="secondary" />
+                <Tag v-if="task.status?.verificationJobName" :value="`Verifier: ${task.status.verificationJobName}`" severity="secondary" />
+                <Tag v-if="task.status?.reviewRef" :value="`Review: ${task.status.reviewRef}`" severity="secondary" />
               </div>
               <div class="mt-4 flex flex-col gap-3">
                 <label class="text-sm text-slate-300">
@@ -424,6 +442,23 @@ onBeforeUnmount(() => {
                     @update:model-value="(value) => assignTask(task.metadata.name, value)"
                   />
                 </label>
+              </div>
+              <div v-if="taskJobs(task.metadata.name).length || taskReviews(task.metadata.name).length" class="mt-4 space-y-2">
+                <p class="muted text-xs uppercase tracking-[0.2em]">Execution</p>
+                <div class="chip-row">
+                  <Tag
+                    v-for="job in taskJobs(task.metadata.name)"
+                    :key="job.metadata?.uid || job.metadata?.name"
+                    :value="`${job.metadata?.name}: ${jobPhase(job)}`"
+                    severity="info"
+                  />
+                  <Tag
+                    v-for="review in taskReviews(task.metadata.name)"
+                    :key="review.metadata?.uid || review.metadata?.name"
+                    :value="`${review.metadata?.name}: ${review.spec?.verdict || review.status?.phase || 'Draft'}`"
+                    severity="warn"
+                  />
+                </div>
               </div>
               <p v-if="task.status?.pullRequestUrl" class="mt-4 break-all text-xs text-emerald-300">PR: {{ task.status.pullRequestUrl }}</p>
             </article>
