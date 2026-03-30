@@ -22,6 +22,7 @@ describe('Hive UI mobile-first management', () => {
     const requirementTitle = `Requirement ${Date.now()}`
     const taskName = unique('task')
     const reviewName = unique('review')
+    const approvalReviewName = unique('review-approve')
     const droneName = unique('drone')
     const linkName = unique('link')
 
@@ -101,6 +102,22 @@ describe('Hive UI mobile-first management', () => {
     waitForOverview((body) => body.reviews.some((item) => item.metadata?.name === reviewName && item.spec?.reviewerDroneRef === droneName))
     waitForOverview((body) => body.tasks.some((item) => item.metadata?.name === taskName && item.status?.phase === 'ChangesRequested'))
 
+    cy.contains('Tasks').click()
+    cy.get(`[data-testid="task-card-${taskName}"]`).should('contain.text', 'ChangesRequested')
+    cy.get(`[data-testid="task-card-${taskName}"]`).should('contain.text', 'Review feedback requested additional changes.')
+    cy.get(`[data-testid="task-approve-${taskName}"]`).click()
+
+    cy.contains('Reviews').click()
+    cy.get('[data-testid="review-name-input"]').clear().type(approvalReviewName)
+    cy.get('[data-testid="review-summary-input"]').clear().type('Manual approval created from the smoke test.')
+    cy.get('[data-testid="review-verdict-select"]').should('contain.text', 'Approve')
+    cy.intercept('POST', '/api/reviews').as('createApprovalReview')
+    cy.get('[data-testid="create-review-button"]').click()
+    cy.wait('@createApprovalReview').its('response.statusCode').should('eq', 200)
+    cy.contains('Review created.').should('be.visible')
+    waitForOverview((body) => body.reviews.some((item) => item.metadata?.name === approvalReviewName && item.spec?.verdict === 'Approve'))
+    waitForOverview((body) => body.tasks.some((item) => item.metadata?.name === taskName && item.status?.phase === 'Approved'))
+
     cy.contains('Projects').click()
     cy.get(`[data-testid="project-link-${projectName}"]`).click()
     cy.contains('Create link').should('be.visible')
@@ -116,12 +133,12 @@ describe('Hive UI mobile-first management', () => {
     cy.wait('@createLink').its('response.statusCode').should('eq', 200)
     cy.contains('Link created.').should('be.visible')
     waitForOverview((body) => body.accesses.some((item) => item.metadata?.name === linkName && item.status?.phase === 'Ready'))
-    waitForOverview((body) => body.tasks.some((item) => item.metadata?.name === taskName && item.status?.phase === 'ChangesRequested'))
+    waitForOverview((body) => body.tasks.some((item) => item.metadata?.name === taskName && item.status?.phase === 'Approved'))
     waitForOverview((body) => body.jobs.some((item) => item.metadata?.labels?.['vinculum.dev/taskrun'] === taskName))
 
     cy.contains('Tasks').click()
-    cy.get(`[data-testid="task-card-${taskName}"]`).should('contain.text', 'ChangesRequested')
-    cy.get(`[data-testid="task-card-${taskName}"]`).should('contain.text', 'Review feedback requested additional changes.')
+    cy.get(`[data-testid="task-card-${taskName}"]`).should('contain.text', 'Approved')
+    cy.get(`[data-testid="task-card-${taskName}"]`).should('contain.text', 'Review approved this task for merge or rollout.')
 
     cy.contains('Jobs').click()
     cy.contains('[data-testid^="job-card-"]', taskName, { timeout: 10000 }).should('exist')
@@ -129,9 +146,10 @@ describe('Hive UI mobile-first management', () => {
     cy.request('/api/overview').then(({ body }) => {
       expect(body.repositories.some((item) => item.metadata?.name === projectName)).to.eq(true)
       expect(body.requirements.some((item) => item.spec?.repositoryRef === projectName)).to.eq(true)
-      expect(body.tasks.some((item) => item.metadata?.name === taskName && item.spec?.droneRef === droneName && item.status?.phase === 'ChangesRequested')).to.eq(true)
+      expect(body.tasks.some((item) => item.metadata?.name === taskName && item.spec?.droneRef === droneName && item.status?.phase === 'Approved')).to.eq(true)
       expect(body.jobs.some((item) => item.metadata?.labels?.['vinculum.dev/taskrun'] === taskName)).to.eq(true)
       expect(body.reviews.some((item) => item.metadata?.name === reviewName && item.spec?.reviewerDroneRef === droneName)).to.eq(true)
+      expect(body.reviews.some((item) => item.metadata?.name === approvalReviewName && item.spec?.verdict === 'Approve')).to.eq(true)
       expect(body.drones.some((item) => item.metadata?.name === droneName)).to.eq(true)
       expect(body.accesses.some((item) => item.metadata?.name === linkName)).to.eq(true)
     })

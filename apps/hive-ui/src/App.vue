@@ -141,12 +141,15 @@ function setDrone(name) {
   activeSection.value = 'links'
 }
 
-function prepareReview(task) {
+function prepareReview(task, verdict = 'ChangesRequested') {
   reviewForm.value.repositoryRef = task.spec?.repositoryRef || ''
   reviewForm.value.taskRef = task.metadata?.name || ''
   reviewForm.value.reviewerDroneRef = task.spec?.droneRef || ''
   reviewForm.value.name = `${task.metadata?.name || 'task'}-review`
-  reviewForm.value.summary = `Manual review for ${task.metadata?.name || 'task'}.`
+  reviewForm.value.verdict = verdict
+  reviewForm.value.summary = verdict === 'Approve'
+    ? `Manual approval for ${task.metadata?.name || 'task'}.`
+    : `Manual review for ${task.metadata?.name || 'task'}.`
   activeSection.value = 'reviews'
 }
 
@@ -460,11 +463,19 @@ onBeforeUnmount(() => {
                 </label>
                 <Button
                   type="button"
-                  label="Open review form"
+                  label="Request changes"
                   severity="secondary"
                   outlined
-                  :data-testid="`task-open-review-${task.metadata.name}`"
-                  @click="prepareReview(task)"
+                  :data-testid="`task-request-changes-${task.metadata.name}`"
+                  @click="prepareReview(task, 'ChangesRequested')"
+                />
+                <Button
+                  type="button"
+                  label="Approve"
+                  severity="success"
+                  outlined
+                  :data-testid="`task-approve-${task.metadata.name}`"
+                  @click="prepareReview(task, 'Approve')"
                 />
               </div>
               <div v-if="taskJobs(task.metadata.name).length || taskReviews(task.metadata.name).length" class="mt-4 space-y-2">
