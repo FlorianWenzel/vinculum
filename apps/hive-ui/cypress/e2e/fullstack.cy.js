@@ -119,7 +119,7 @@ describe('Hive UI mobile-first management', () => {
     waitForOverview((body) => body.jobs.some((item) => item.metadata?.labels?.['vinculum.dev/taskrun'] === taskName))
 
     cy.contains('Jobs').click()
-    cy.get(`[data-testid="job-card-${taskName}"]`, { timeout: 10000 }).should('exist')
+    cy.contains('[data-testid^="job-card-"]', taskName, { timeout: 10000 }).should('exist')
 
     cy.request('/api/overview').then(({ body }) => {
       expect(body.repositories.some((item) => item.metadata?.name === projectName)).to.eq(true)
