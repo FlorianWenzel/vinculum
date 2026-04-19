@@ -23,17 +23,42 @@ Show
 Type "vnclm list agents"
 Sleep 150ms
 Enter
+Sleep 1500ms
+
+Type "vnclm create agent"
+Sleep 150ms
+Enter
+Sleep 1500ms
+
+Type "seven-of-nine"
+Sleep 300ms
+Enter
+Sleep 500ms
+
+Type "gpt-5.4"
+Sleep 300ms
+Enter
+Sleep 500ms
+
+Enter
+Sleep 500ms
+
+Tab
+Sleep 400ms
+
+Enter
+Sleep 400ms
+
+Enter
+Sleep 400ms
+
+Enter
+Sleep 3s
+
+Type "vnclm list agents"
+Sleep 150ms
+Enter
 Sleep 2s
-
-Type "vnclm ctx set-agent locutus"
-Sleep 150ms
-Enter
-Sleep 800ms
-
-Type 'vnclm run --fresh --timeout 60 "Compose a haiku about the Borg collective."'
-Sleep 150ms
-Enter
-Sleep 16s
 
 Type "vnclm ctx set-agent seven-of-nine"
 Sleep 150ms
