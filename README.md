@@ -18,7 +18,11 @@
 
 ---
 
-Vinculum runs long-lived [`charmbracelet/crush`](https://github.com/charmbracelet/crush) agents as Kubernetes Deployments. Each Agent is a pod that holds an open crush session and serves a small HTTP API. Submit **Tasks** against an Agent; they execute serially in-pod, reuse the same workspace PVC, and preserve conversation history across restarts.
+> *The Vinculum is the interlink device that binds the Borg collective — a single consciousness stretched across every drone.*
+
+Vinculum runs long-lived [`charmbracelet/crush`](https://github.com/charmbracelet/crush) agents as Kubernetes Deployments. Each **Agent** is a pod that holds an open crush session and serves a small HTTP API. Submit **Tasks** against an Agent; they execute serially in-pod, reuse the same workspace PVC, and preserve conversation history across restarts.
+
+One operator. Many agents. One shared link — the vinculum.
 
 ## Why
 
@@ -123,11 +127,11 @@ vnclm create agent                        # wizard picks the provider you just c
 ### 5. Run a Task
 
 ```bash
-vnclm ctx set-agent <agent-name>
-vnclm run "write a haiku about kubernetes"
+vnclm ctx set-agent locutus
+vnclm run "Compose a haiku about the Borg collective."
 ```
 
-Logs stream live from the crush session; the CLI blocks until terminal phase (`Succeeded` | `Failed` | `TimedOut`).
+Logs stream live from the crush session; the CLI blocks until terminal phase (`Succeeded` | `Failed` | `TimedOut`). Run the same agent again later — crush picks up the session, conversation history intact.
 
 ## CLI cheatsheet
 
