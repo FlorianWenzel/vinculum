@@ -1,6 +1,6 @@
 Output vnclm.gif
 
-Env PATH "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+Env PATH "/Users/florianwenzel/go/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 Env KUBECONFIG "/Users/florianwenzel/.kube/config"
 Env HOME "/Users/florianwenzel"
 Env TERM "xterm-256color"
@@ -9,7 +9,7 @@ Env STARSHIP_CONFIG "/Users/florianwenzel/.config/starship.toml"
 Set Shell "zsh"
 Set FontSize 15
 Set Width 1200
-Set Height 720
+Set Height 820
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 35ms
 Set PlaybackSpeed 1.0
@@ -51,7 +51,7 @@ Sleep 1500ms
 Enter
 Sleep 2s
 
-Tab
+Enter
 Sleep 1200ms
 
 Enter
