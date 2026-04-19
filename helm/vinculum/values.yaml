@@ -1,0 +1,9 @@
+operator:
+  image:
+    repository: ghcr.io/florianwenzel/vinculum-operator
+    tag: ""
+    pullPolicy: IfNotPresent
+  defaultAgentImage:
+    repository: ghcr.io/florianwenzel/vinculum-agent
+    tag: ""
+  namespaceScoped: true
