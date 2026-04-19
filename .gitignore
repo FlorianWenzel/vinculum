@@ -1,0 +1,14 @@
+.DS_Store
+bin/
+dist/
+.env
+*.local
+.local/
+.tilt-secrets/
+.idea/
+.vscode/
+.claude/
+**/node_modules/
+helm/**/charts/
+chart-repo/
+site/assets/
