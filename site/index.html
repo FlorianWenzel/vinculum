@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vinculum — Kubernetes-native runner for AI coding agents</title>
+  <meta name="description" content="One operator. Many agents. One shared link — the vinculum. Long-lived AI coding agents running as Kubernetes Deployments with preserved workspaces and conversation history.">
+  <meta property="og:title" content="Vinculum">
+  <meta property="og:description" content="Kubernetes-native runner for AI coding agents. Long-lived sessions. Declarative CRDs. One binary CLI.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="assets/vnclm.gif">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <div class="brand">VINCULUM</div>
+    <ul>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#resources">Resources</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="https://github.com/FlorianWenzel/vinculum" target="_blank" rel="noopener">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="wrap">
+    <div class="status">HIVE_STATUS: ONLINE · v0.1.0</div>
+    <h1>The collective<br>for AI coding agents.</h1>
+    <p class="tagline">Long-lived <em>crush</em> agents running as Kubernetes Deployments. One operator. Many drones. One shared link — the vinculum.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#install">Assimilate →</a>
+      <a class="btn btn-ghost" href="https://github.com/FlorianWenzel/vinculum" target="_blank" rel="noopener">View source</a>
+    </div>
+    <div class="demo">
+      <div class="bar">
+        <span class="dot green"></span><span class="dot"></span><span class="dot"></span>
+        <span class="title">vnclm — zsh — 120×45</span>
+      </div>
+      <img src="assets/vnclm.gif" alt="vnclm CLI demo">
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="quote">The Vinculum is the interlink device that binds the Borg collective — a single consciousness stretched across every drone.</p>
+  </div>
+</section>
+
+<section id="why">
+  <div class="wrap">
+    <div class="eyebrow">Why Vinculum</div>
+    <h2>Drones that remember.</h2>
+    <p class="lede">Spinning up a fresh pod for every prompt is wasteful. Vinculum runs each Agent as a long-lived pod with an open crush session and a persistent workspace — so context survives, PVCs survive, and cold-start disappears.</p>
+    <div class="grid">
+      <div class="card">
+        <div class="icon">⟳</div>
+        <h3>Long-lived sessions</h3>
+        <p>A pod per Agent — no per-prompt cold-start. Crush session + <code>/workspace</code> PVC survive restarts.</p>
+      </div>
+      <div class="card">
+        <div class="icon">☸</div>
+        <h3>Kube-native</h3>
+        <p>Declarative <code>Agent</code>, <code>Task</code>, <code>AgentSchedule</code>, <code>MCPServer</code> CRDs. One operator reconciles them into Deployments, PVCs, RBAC, Services.</p>
+      </div>
+      <div class="card">
+        <div class="icon">◎</div>
+        <h3>Multi-provider</h3>
+        <p>Azure OpenAI, Anthropic, OpenAI, or bring-your-own — a provider is just a labeled Secret.</p>
+      </div>
+      <div class="card">
+        <div class="icon">▸_</div>
+        <h3>One-binary CLI</h3>
+        <p>Port-forwards through your active kubecontext — no exposed operator endpoint, no long-lived local state.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="architecture">
+  <div class="wrap">
+    <div class="eyebrow">Architecture</div>
+    <h2>One operator. Many agents.</h2>
+    <p class="lede">The operator reconciles CRDs into pod-per-Agent Deployments. Each agent pod supervises crush and exposes an HTTP API for task dispatch + log streaming. The CLI port-forwards per invocation.</p>
+    <div class="arch">
+<pre>
+  ┌──────────┐    vnclm run / get / logs    ┌──────────────────────┐
+  │   user   │ ────────────────────────────▶│      vnclm CLI       │
+  └──────────┘                              └──────────┬───────────┘
+                                                       │ port-forward
+                 ┌─────────────────────────────────────┼─────────────────────────────┐
+                 │                                     │                             │
+                 ▼                                     ▼                             ▼
+     ┌────────────────────┐           ┌────────────────────┐            ┌────────────────────┐
+     │     Operator       │◀───────── │     Agent Pod      │──────────▶ │   Workspace PVC    │
+     │  reconciles        │   patch   │  crush + agent     │            │  /workspace        │
+     │  Agent / Task      │   Task    │  HTTP :8090        │            └────────────────────┘
+     │  Schedule / MCP    │   status  └──────────┬─────────┘
+     └──────────┬─────────┘                      │ envFrom
+                │                                ▼
+                │                      ┌────────────────────┐
+                └─────────────────────▶│    Provider Sec    │
+                                       └────────────────────┘
+</pre>
+    </div>
+  </div>
+</section>
+
+<section id="components">
+  <div class="wrap">
+    <div class="eyebrow">Components</div>
+    <h2>Three moving parts.</h2>
+    <table>
+      <thead>
+        <tr><th>Component</th><th>Path</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono"><strong>Operator</strong></td>
+          <td class="path">apps/operator</td>
+          <td>Reconciles CRDs into Deployments/PVCs/Secrets. Internal HTTP API on <code>:8084</code>.</td>
+        </tr>
+        <tr>
+          <td class="mono"><strong>vinculum-agent</strong></td>
+          <td class="path">apps/vinculum-agent</td>
+          <td>Runs inside each Agent pod. Supervises <code>crush</code>, exposes <code>:8090</code>, patches task status.</td>
+        </tr>
+        <tr>
+          <td class="mono"><strong>vnclm</strong></td>
+          <td class="path">apps/vnclm</td>
+          <td>CLI with port-forward client, interactive wizards, live log streaming, shell completion.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="resources">
+  <div class="wrap">
+    <div class="eyebrow">Custom Resources</div>
+    <h2>Declare it. The hive complies.</h2>
+    <p class="lede">Four CRDs. Everything else is derived.</p>
+    <div class="grid">
+      <div class="card">
+        <div class="icon">A</div>
+        <h3>Agent</h3>
+        <p>Long-running agent drone. Model, provider secret ref, instructions, workspace size, attached MCP servers. Operator creates Deployment, Service, PVC, RBAC.</p>
+      </div>
+      <div class="card">
+        <div class="icon">T</div>
+        <h3>Task</h3>
+        <p>A unit of work. Prompt, <code>fresh</code>, workspace mode (<code>shared</code> or <code>ephemeral</code>), timeout, artifacts, env. Serial execution per Agent.</p>
+      </div>
+      <div class="card">
+        <div class="icon">S</div>
+        <h3>AgentSchedule</h3>
+        <p>Cron trigger that stamps Tasks from a template. Concurrency policy: <code>Allow</code>, <code>Forbid</code>, <code>Replace</code>.</p>
+      </div>
+      <div class="card">
+        <div class="icon">M</div>
+        <h3>MCPServer</h3>
+        <p>Reusable Model Context Protocol server — stdio or http. Attach by name to any Agent. <code>secretRef</code> wired as <code>envFrom</code>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <div class="eyebrow">Initiation protocol</div>
+    <h2>Five steps to assimilation.</h2>
+    <p class="lede">Any Kubernetes cluster. Any active context. Helm chart + Homebrew CLI.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="num">01</div>
+        <div>
+          <h3>Install the chart</h3>
+          <p>Helm OCI install — no repo add, no values overrides required for a default run.</p>
+<pre><span class="cmd">helm</span> install vinculum <span class="flag">oci://</span>ghcr.io/florianwenzel/helm/vinculum \
+  <span class="flag">--version</span> 0.1.0 \
+  <span class="flag">-n</span> vinculum-system <span class="flag">--create-namespace</span></pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">02</div>
+        <div>
+          <h3>Install the CLI</h3>
+          <p>Homebrew tap for macOS + Linux. Prebuilt binaries available for all platforms on every release.</p>
+<pre><span class="cmd">brew</span> install FlorianWenzel/vinculum/vnclm</pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">03</div>
+        <div>
+          <h3>Create a provider Secret</h3>
+          <p>Drop API keys into a labeled Secret. Wizard handles the labeling + encoding.</p>
+<pre><span class="cmd">vnclm</span> create provider <span class="cmt"># interactive wizard</span></pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">04</div>
+        <div>
+          <h3>Create an Agent</h3>
+          <p>Pick a model, point at a provider, optionally attach MCP servers. Operator provisions the pod.</p>
+<pre><span class="cmd">vnclm</span> create agent <span class="cmt"># wizard</span></pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">05</div>
+        <div>
+          <h3>Run a Task</h3>
+          <p>Streams live. Blocks until terminal phase. Run again later — crush picks up the session, history intact.</p>
+<pre><span class="cmd">vnclm</span> ctx set-agent locutus
+<span class="cmd">vnclm</span> run <span class="str">"Compose a haiku about the Borg collective."</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="cli">
+  <div class="wrap">
+    <div class="eyebrow">Control surface</div>
+    <h2>vnclm — the command link.</h2>
+    <p class="lede">kubectl-shaped verbs. Interactive wizards. Per-invocation port-forward. No exposed endpoints.</p>
+    <div class="codeblock">
+      <div class="head">
+        <span>Cheatsheet</span>
+        <span class="lang">zsh</span>
+      </div>
+<pre><span class="cmd">vnclm</span> ctx show <span class="cmt">|</span> set-agent &lt;name&gt; <span class="cmt">|</span> clear-agent
+<span class="cmd">vnclm</span> get agents<span class="cmt">|</span>tasks<span class="cmt">|</span>schedules<span class="cmt">|</span>providers<span class="cmt">|</span>mcps [name]  <span class="flag">[-o table|wide|json|yaml]</span>
+<span class="cmd">vnclm</span> delete &lt;kind&gt; &lt;name&gt;                              <span class="flag">[--yes]</span>
+<span class="cmd">vnclm</span> create provider<span class="cmt">|</span>agent<span class="cmt">|</span>task<span class="cmt">|</span>schedule<span class="cmt">|</span>mcp        <span class="cmt"># wizard</span>
+<span class="cmd">vnclm</span> create <span class="flag">-f</span> manifest.yaml                         <span class="cmt"># apply (multi-doc)</span>
+<span class="cmd">vnclm</span> logs &lt;task&gt;                                    <span class="flag">[-f]</span>
+<span class="cmd">vnclm</span> run <span class="str">"&lt;prompt&gt;"</span>  <span class="flag">[--agent]</span> <span class="flag">[--fresh]</span> <span class="flag">[--timeout N]</span></pre>
+    </div>
+  </div>
+</section>
+
+<section id="mcp">
+  <div class="wrap">
+    <div class="eyebrow">Tool assimilation</div>
+    <h2>MCP servers as first-class drones.</h2>
+    <p class="lede">Give agents extra tools by declaring <code>MCPServer</code> resources — stdio processes or HTTP endpoints — and attaching them by reference. One MCPServer, many agents.</p>
+    <div class="codeblock">
+      <div class="head">
+        <span>Attach a filesystem MCP to every agent that needs it</span>
+        <span class="lang">zsh</span>
+      </div>
+<pre><span class="cmt"># stdio MCP — filesystem over the agent's /workspace PVC</span>
+<span class="cmd">vnclm</span> create mcp <span class="flag">--name</span> filesystem <span class="flag">--command</span> npx \
+  <span class="flag">--arg</span> -y <span class="flag">--arg</span> @modelcontextprotocol/server-filesystem <span class="flag">--arg</span> /workspace \
+  <span class="flag">--enabled</span>
+
+<span class="cmt"># http MCP with a secret injected as envFrom</span>
+<span class="cmd">vnclm</span> create mcp <span class="flag">--name</span> github <span class="flag">--url</span> https://api.githubcopilot.com/mcp/ \
+  <span class="flag">--secret-ref</span> github-mcp <span class="flag">--enabled</span>
+
+<span class="cmd">vnclm</span> create agent   <span class="cmt"># wizard → multiselect attaches MCPs</span></pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>© 2026 · Vinculum collective · MIT</div>
+    <div>
+      <a href="https://github.com/FlorianWenzel/vinculum">Source</a> ·
+      <a href="https://github.com/FlorianWenzel/vinculum/releases/latest">Releases</a> ·
+      <a href="https://github.com/FlorianWenzel/homebrew-vinculum">Homebrew tap</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
