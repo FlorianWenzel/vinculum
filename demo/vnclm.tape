@@ -49,7 +49,7 @@ Enter
 Sleep 1500ms
 
 Enter
-Sleep 2s
+Sleep 1500ms
 
 Enter
 Sleep 1200ms
@@ -67,11 +67,6 @@ Type "vnclm list agents"
 Sleep 300ms
 Enter
 Sleep 3s
-
-Type "vnclm ctx set-agent seven-of-nine"
-Sleep 300ms
-Enter
-Sleep 2s
 
 Type 'vnclm run --fresh --timeout 60 "Explain, in one sentence, why resistance is futile."'
 Sleep 300ms
