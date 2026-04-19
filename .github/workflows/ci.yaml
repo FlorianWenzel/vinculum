@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/vnclm/go.mod
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Test operator
+        working-directory: apps/operator
+        env:
+          GOWORK: "off"
+        run: go test ./...
+
+      - name: Test agent
+        working-directory: apps/vinculum-agent
+        env:
+          GOWORK: "off"
+        run: go test ./...
+
+      - name: Build vnclm
+        working-directory: apps/vnclm
+        env:
+          GOWORK: "off"
+        run: go build ./...
+
+      - name: Build umbrella chart dependencies
+        run: helm dependency build helm/vinculum
+
+      - name: Lint Helm charts
+        run: |
+          helm lint helm/operator
+          helm lint helm/agent
+          helm lint helm/vinculum
+
+      - name: Render deployable charts
+        run: |
+          helm template vinculum helm/vinculum --namespace vinculum-system >/tmp/vinculum-rendered.yaml
+          helm template operator helm/operator --namespace vinculum-system >/tmp/operator-rendered.yaml
+
+      - name: Package and render remote-ready chart
+        run: |
+          mkdir -p /tmp/chart-packages
+          helm package helm/vinculum --destination /tmp/chart-packages
+          helm template vinculum /tmp/chart-packages/vinculum-*.tgz --namespace vinculum-system >/tmp/vinculum-packaged-rendered.yaml
