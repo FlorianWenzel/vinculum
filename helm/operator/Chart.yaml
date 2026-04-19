@@ -1,6 +1,0 @@
-apiVersion: v2
-name: operator
-description: Vinculum Kubernetes operator for Agent and Task resources
-type: application
-version: 0.1.0
-appVersion: 0.1.0

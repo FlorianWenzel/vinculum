@@ -39,19 +39,11 @@ jobs:
           GOWORK: "off"
         run: go build ./...
 
-      - name: Build umbrella chart dependencies
-        run: helm dependency build helm/vinculum
+      - name: Lint Helm chart
+        run: helm lint helm/vinculum
 
-      - name: Lint Helm charts
-        run: |
-          helm lint helm/operator
-          helm lint helm/agent
-          helm lint helm/vinculum
-
-      - name: Render deployable charts
-        run: |
-          helm template vinculum helm/vinculum --namespace vinculum-system >/tmp/vinculum-rendered.yaml
-          helm template operator helm/operator --namespace vinculum-system >/tmp/operator-rendered.yaml
+      - name: Render chart
+        run: helm template vinculum helm/vinculum --namespace vinculum-system >/tmp/vinculum-rendered.yaml
 
       - name: Package and render remote-ready chart
         run: |

@@ -22,8 +22,8 @@ docker_build(
     only=['apps/operator'],
 )
 
-# Operator chart (CRDs + deployment + RBAC).
-k8s_yaml(helm('helm/operator', name='operator', namespace=system_ns, set=[
+# Vinculum chart (CRDs + operator deployment + RBAC).
+k8s_yaml(helm('helm/vinculum', name='vinculum', namespace=system_ns, set=[
     'operator.defaultAgentImage.repository=vinculum-agent',
     'operator.defaultAgentImage.tag=tilt-dev',
 ]))
