@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vinculum - Kubernetes-native runner for AI coding agents</title>
+  <meta name="description" content="One operator. Many agents. One shared link - the vinculum. Long-lived AI coding agents running as Kubernetes Deployments with preserved workspaces and conversation history.">
+  <meta property="og:title" content="Vinculum">
+  <meta property="og:description" content="Kubernetes-native runner for AI coding agents. Long-lived sessions. Declarative CRDs. One binary CLI.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="assets/vnclm.gif">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<canvas id="bg-net" aria-hidden="true"></canvas>
+
+<nav>
+  <div class="wrap">
+    <div class="brand">VINCULUM</div>
+    <ul>
+      <li><a href="#resources">Resources</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#cli">CLI</a></li>
+      <li><a href="https://github.com/FlorianWenzel/vinculum" target="_blank" rel="noopener">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="wrap">
+    <div class="status">HIVE_STATUS: ONLINE · v0.1.0</div>
+    <h1>The collective<br>for AI coding agents.</h1>
+    <p class="tagline">Long-lived <em>crush</em> agents running as Kubernetes Deployments. One operator. Many drones. One shared link - the vinculum.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#install">Assimilate →</a>
+      <a class="btn btn-ghost" href="https://github.com/FlorianWenzel/vinculum" target="_blank" rel="noopener">View source</a>
+    </div>
+    <div class="demo">
+      <div class="bar">
+        <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+        <span class="title">vnclm - zsh - 120×45</span>
+      </div>
+      <img src="assets/vnclm.gif" alt="vnclm CLI demo">
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <blockquote class="quote">
+      <p>“The processing device at the core of every Borg vessel. It interconnects the minds of all the drones. It purges individual thoughts and disseminates information relevant to the Collective.”</p>
+      <p>“It brings order to chaos.”</p>
+      <cite>– Seven of Nine and Kathryn Janeway</cite>
+    </blockquote>
+  </div>
+</section>
+
+<section id="why">
+  <div class="wrap">
+    <div class="eyebrow">Why Vinculum</div>
+    <h2>Drones that remember.</h2>
+    <p class="lede">Spinning up a fresh pod for every prompt is wasteful. Vinculum runs each Agent as a long-lived pod with an open crush session and a persistent workspace - so context survives, PVCs survive, and cold-start disappears.</p>
+    <div class="grid">
+      <div class="card">
+        <div class="icon">⟳</div>
+        <h3>Long-lived sessions</h3>
+        <p>A pod per Agent - no per-prompt cold-start. Crush session + <code>/workspace</code> PVC survive restarts.</p>
+      </div>
+      <div class="card">
+        <div class="icon">☸</div>
+        <h3>Kube-native</h3>
+        <p>Declarative <code>Agent</code>, <code>Task</code>, <code>AgentSchedule</code>, <code>MCPServer</code> CRDs. One operator reconciles them into Deployments, PVCs, RBAC, Services.</p>
+      </div>
+      <div class="card">
+        <div class="icon">◎</div>
+        <h3>Multi-provider</h3>
+        <p>Azure OpenAI, Anthropic, OpenAI, or bring-your-own - a provider is just a labeled Secret.</p>
+      </div>
+      <div class="card">
+        <div class="icon">▸_</div>
+        <h3>One-binary CLI</h3>
+        <p>Port-forwards through your active kubecontext - no exposed operator endpoint, no long-lived local state.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="resources">
+  <div class="wrap">
+    <div class="eyebrow">Custom Resources</div>
+    <h2>Declare it. The hive complies.</h2>
+    <p class="lede">Four CRDs. Everything else is derived.</p>
+    <div class="grid">
+      <div class="card">
+        <div class="icon">A</div>
+        <h3>Agent</h3>
+        <p>Long-running agent drone. Model, provider secret ref, instructions, workspace size, attached MCP servers. Operator creates Deployment, Service, PVC, RBAC.</p>
+      </div>
+      <div class="card">
+        <div class="icon">T</div>
+        <h3>Task</h3>
+        <p>A unit of work. Prompt, <code>fresh</code>, workspace mode (<code>shared</code> or <code>ephemeral</code>), timeout, artifacts, env. Serial execution per Agent.</p>
+      </div>
+      <div class="card">
+        <div class="icon">S</div>
+        <h3>AgentSchedule</h3>
+        <p>Cron trigger that stamps Tasks from a template. Concurrency policy: <code>Allow</code>, <code>Forbid</code>, <code>Replace</code>.</p>
+      </div>
+      <div class="card">
+        <div class="icon">M</div>
+        <h3>MCPServer</h3>
+        <p>Reusable Model Context Protocol server - stdio or http. Attach by name to any Agent. <code>secretRef</code> wired as <code>envFrom</code>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <div class="eyebrow">Initiation protocol</div>
+    <h2>Five steps to assimilation.</h2>
+    <p class="lede">Any Kubernetes cluster. Any active context. Helm chart + Homebrew CLI.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="num">01</div>
+        <div>
+          <h3>Install the chart</h3>
+          <p>Helm OCI install - no repo add, no values overrides required for a default run.</p>
+<pre><span class="cmd">helm</span> install vinculum <span class="flag">oci://</span>ghcr.io/florianwenzel/helm/vinculum \
+  <span class="flag">--version</span> 0.1.0 \
+  <span class="flag">-n</span> vinculum-system <span class="flag">--create-namespace</span></pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">02</div>
+        <div>
+          <h3>Install the CLI</h3>
+          <p>Homebrew tap for macOS + Linux. Prebuilt binaries available for all platforms on every release.</p>
+<pre><span class="cmd">brew</span> install FlorianWenzel/vinculum/vnclm</pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">03</div>
+        <div>
+          <h3>Create a provider Secret</h3>
+          <p>Drop API keys into a labeled Secret. Wizard handles the labeling + encoding.</p>
+<pre><span class="cmd">vnclm</span> create provider <span class="cmt"># interactive wizard</span></pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">04</div>
+        <div>
+          <h3>Create an Agent</h3>
+          <p>Pick a model, point at a provider, optionally attach MCP servers. Operator provisions the pod.</p>
+<pre><span class="cmd">vnclm</span> create agent <span class="cmt"># wizard</span></pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">05</div>
+        <div>
+          <h3>Run a Task</h3>
+          <p>Streams live. Blocks until terminal phase. Run again later - crush picks up the session, history intact.</p>
+<pre><span class="cmd">vnclm</span> ctx set-agent locutus
+<span class="cmd">vnclm</span> run <span class="str">"Compose a haiku about the Borg collective."</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="cli">
+  <div class="wrap">
+    <div class="eyebrow">Control surface</div>
+    <h2>vnclm - the command link.</h2>
+    <p class="lede">kubectl-shaped verbs. Interactive wizards. Per-invocation port-forward. No exposed endpoints.</p>
+    <div class="codeblock">
+      <div class="head">
+        <span>Cheatsheet</span>
+        <span class="lang">zsh</span>
+      </div>
+<pre><span class="cmd">vnclm</span> ctx show <span class="cmt">|</span> set-agent &lt;name&gt; <span class="cmt">|</span> clear-agent
+<span class="cmd">vnclm</span> get agents<span class="cmt">|</span>tasks<span class="cmt">|</span>schedules<span class="cmt">|</span>providers<span class="cmt">|</span>mcps [name]  <span class="flag">[-o table|wide|json|yaml]</span>
+<span class="cmd">vnclm</span> delete &lt;kind&gt; &lt;name&gt;                              <span class="flag">[--yes]</span>
+<span class="cmd">vnclm</span> create provider<span class="cmt">|</span>agent<span class="cmt">|</span>task<span class="cmt">|</span>schedule<span class="cmt">|</span>mcp        <span class="cmt"># wizard</span>
+<span class="cmd">vnclm</span> create <span class="flag">-f</span> manifest.yaml                         <span class="cmt"># apply (multi-doc)</span>
+<span class="cmd">vnclm</span> logs &lt;task&gt;                                    <span class="flag">[-f]</span>
+<span class="cmd">vnclm</span> run <span class="str">"&lt;prompt&gt;"</span>  <span class="flag">[--agent]</span> <span class="flag">[--fresh]</span> <span class="flag">[--timeout N]</span></pre>
+    </div>
+  </div>
+</section>
+
+<section id="mcp">
+  <div class="wrap">
+    <div class="eyebrow">Tool assimilation</div>
+    <h2>MCP servers as first-class drones.</h2>
+    <p class="lede">Give agents extra tools by declaring <code>MCPServer</code> resources - stdio processes or HTTP endpoints - and attaching them by reference. One MCPServer, many agents.</p>
+    <div class="codeblock">
+      <div class="head">
+        <span>Attach a filesystem MCP to every agent that needs it</span>
+        <span class="lang">zsh</span>
+      </div>
+<pre><span class="cmt"># stdio MCP - filesystem over the agent's /workspace PVC</span>
+<span class="cmd">vnclm</span> create mcp <span class="flag">--name</span> filesystem <span class="flag">--command</span> npx \
+  <span class="flag">--arg</span> -y <span class="flag">--arg</span> @modelcontextprotocol/server-filesystem <span class="flag">--arg</span> /workspace \
+  <span class="flag">--enabled</span>
+
+<span class="cmt"># http MCP with a secret injected as envFrom</span>
+<span class="cmd">vnclm</span> create mcp <span class="flag">--name</span> github <span class="flag">--url</span> https://api.githubcopilot.com/mcp/ \
+  <span class="flag">--secret-ref</span> github-mcp <span class="flag">--enabled</span>
+
+<span class="cmd">vnclm</span> create agent   <span class="cmt"># wizard → multiselect attaches MCPs</span></pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>© 2026 · Vinculum collective · MIT</div>
+    <div>
+      <a href="https://github.com/FlorianWenzel/vinculum">Source</a> ·
+      <a href="https://github.com/FlorianWenzel/vinculum/releases/latest">Releases</a> ·
+      <a href="https://github.com/FlorianWenzel/homebrew-vinculum">Homebrew tap</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const cv = document.getElementById('bg-net');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let w = 0, h = 0, dpr = 1;
+  const nodes = [];
+  const density = 7500;
+  const CONNECT = 130;
+  const REPEL_R = 38;
+  const MOUSE_RADIUS = 170;
+  const MOUSE_FORCE = 0.18;
+  const MAX_SPEED = 1.1;
+  const mouse = { x: -9999, y: -9999, active: false, down: false };
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = window.innerWidth;
+    h = window.innerHeight;
+    cv.style.width = w + 'px';
+    cv.style.height = h + 'px';
+    cv.width = Math.floor(w * dpr);
+    cv.height = Math.floor(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const target = Math.round((w * h) / density);
+    while (nodes.length < target) {
+      nodes.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+      });
+    }
+    while (nodes.length > target) nodes.pop();
+  }
+
+  function step() {
+    ctx.clearRect(0, 0, w, h);
+
+    const mr2 = MOUSE_RADIUS * MOUSE_RADIUS;
+    const sign = mouse.down ? -1 : 1;
+    const rr2 = REPEL_R * REPEL_R;
+
+    // pair loop: short-range repulsion (no clumping) + line collection
+    const lines = [];
+    const c2 = CONNECT * CONNECT;
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j];
+        const dx = a.x - b.x, dy = a.y - b.y;
+        const d2 = dx*dx + dy*dy;
+        if (d2 < rr2 && d2 > 0.01) {
+          const d = Math.sqrt(d2);
+          const f = (1 - d / REPEL_R) * 0.08;
+          const nx = dx / d, ny = dy / d;
+          a.vx += nx * f; a.vy += ny * f;
+          b.vx -= nx * f; b.vy -= ny * f;
+        }
+        if (d2 < c2) lines.push(i, j, d2);
+      }
+    }
+
+    for (const n of nodes) {
+      if (mouse.active) {
+        const dx = n.x - mouse.x;
+        const dy = n.y - mouse.y;
+        const d2 = dx*dx + dy*dy;
+        if (d2 < mr2 && d2 > 0.5) {
+          const d = Math.sqrt(d2);
+          const falloff = 1 - d / MOUSE_RADIUS;
+          const force = falloff * falloff * MOUSE_FORCE * sign;
+          n.vx += (dx / d) * force;
+          n.vy += (dy / d) * force;
+        }
+      }
+      // gentle brownian drift
+      n.vx += (Math.random() - 0.5) * 0.03;
+      n.vy += (Math.random() - 0.5) * 0.03;
+      // light friction (enough to prevent runaway, little enough to keep drifting)
+      n.vx *= 0.992;
+      n.vy *= 0.992;
+      const sp = Math.hypot(n.vx, n.vy);
+      if (sp > MAX_SPEED) { n.vx = n.vx / sp * MAX_SPEED; n.vy = n.vy / sp * MAX_SPEED; }
+      n.x += n.vx;
+      n.y += n.vy;
+      if (n.x < -20) n.x = w + 20;
+      if (n.x > w + 20) n.x = -20;
+      if (n.y < -20) n.y = h + 20;
+      if (n.y > h + 20) n.y = -20;
+    }
+
+    ctx.lineWidth = 1;
+    for (let k = 0; k < lines.length; k += 3) {
+      const a = nodes[lines[k]], b = nodes[lines[k+1]];
+      const t = 1 - Math.sqrt(lines[k+2]) / CONNECT;
+      ctx.strokeStyle = `rgba(0,255,65,${t * 0.32})`;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = 'rgba(0,255,65,0.9)';
+    ctx.fillStyle = 'rgba(150,255,180,0.95)';
+    for (const n of nodes) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, 1.9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener('resize', resize);
+  window.addEventListener('pointermove', (e) => {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+    mouse.active = true;
+  });
+  window.addEventListener('pointerdown', () => { mouse.down = true; });
+  window.addEventListener('pointerup',   () => { mouse.down = false; });
+  window.addEventListener('mouseleave',  () => { mouse.active = false; });
+  window.addEventListener('blur',        () => { mouse.active = false; mouse.down = false; });
+
+  resize();
+  if (!reduceMotion) step();
+  else {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(0,255,65,0.6)';
+    for (const n of nodes) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+})();
+
+(() => {
+  const targets = document.querySelectorAll('.codeblock pre, .step pre');
+  targets.forEach(pre => {
+    const host = pre.closest('.codeblock') || pre;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'copy-btn';
+    btn.title = 'Copy';
+    btn.setAttribute('aria-label', 'Copy code');
+    btn.innerHTML = `
+      <svg class="icon-copy" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="4" y="4" width="9" height="10" rx="1.5"/>
+        <path d="M10 4V3a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3v8.5A1.5 1.5 0 0 0 3.5 13H4"/>
+      </svg>
+      <svg class="icon-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="3.5 8.5 6.8 11.8 12.5 5.5"/>
+      </svg>
+    `;
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const text = pre.innerText.replace(/\u00A0/g, ' ').trim();
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        btn.classList.add('copied');
+        btn.title = 'Copied';
+        setTimeout(() => { btn.classList.remove('copied'); btn.title = 'Copy'; }, 1400);
+      } catch (err) {
+        btn.title = 'Copy failed';
+      }
+    });
+    host.appendChild(btn);
+  });
+})();
+</script>
+
+</body>
+</html>
