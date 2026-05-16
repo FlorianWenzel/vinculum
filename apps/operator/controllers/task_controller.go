@@ -104,7 +104,18 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return r.fail(ctx, &task, "AgentDisabled", fmt.Sprintf("agent %q disabled", agent.Name))
 	}
 	if !agent.Status.Ready {
-		if err := r.setPhase(ctx, &task, v1alpha1.TaskPhasePending, "AgentNotReady", "waiting for agent pod"); err != nil {
+		reason := "AgentNotReady"
+		message := "waiting for agent pod"
+		// If the operator already diagnosed the agent's pending state (e.g.
+		// the git-clone init container failed), surface that on the Task
+		// instead of a generic message.
+		if agent.Status.Reason != "" {
+			reason = agent.Status.Reason
+			if agent.Status.Message != "" {
+				message = agent.Status.Message
+			}
+		}
+		if err := r.setPhase(ctx, &task, v1alpha1.TaskPhasePending, reason, message); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil

@@ -65,6 +65,15 @@ func (e *Executor) Execute(ctx context.Context, state *tasks.State, workdir stri
 	}
 
 	wantContinue := !state.Payload.Spec.Fresh
+	// A per-Task model override on a continued session would feed the new
+	// model the prior model's session state — usually garbage. Force a
+	// fresh run.
+	if wantContinue && strings.TrimSpace(state.Payload.Spec.Model) != "" {
+		if e.logger != nil {
+			e.logger.Printf("task overrides model %q; forcing --fresh to avoid mixing session state", state.Payload.Spec.Model)
+		}
+		wantContinue = false
+	}
 	stdout, stderr, exitCode, runErr := e.runCrush(ctx, state, runDir, prompt, wantContinue)
 
 	// crush fails hard when --continue is requested but no prior session exists.

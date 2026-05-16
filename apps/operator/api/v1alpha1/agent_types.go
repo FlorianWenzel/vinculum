@@ -98,7 +98,13 @@ type GitCredentials struct {
 }
 
 type AgentStatus struct {
-	Phase           string             `json:"phase,omitempty"`
+	Phase string `json:"phase,omitempty"`
+	// Reason is a short, machine-readable cause when Phase is not "Ready"
+	// (e.g. "InitContainerFailed", "ImagePullBackOff").
+	Reason string `json:"reason,omitempty"`
+	// Message is a human-readable detail to accompany Reason — often the
+	// last line of the failing container's stderr.
+	Message         string             `json:"message,omitempty"`
 	ActiveRuns      int32              `json:"activeRuns,omitempty"`
 	Conditions      []metav1.Condition `json:"conditions,omitempty"`
 	LastSeen        *metav1.Time       `json:"lastSeen,omitempty"`

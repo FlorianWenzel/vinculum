@@ -87,7 +87,7 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		if err := r.teardown(ctx, &agent); err != nil {
 			return ctrl.Result{}, err
 		}
-		return r.writeStatus(ctx, &agent, "Disabled", false, 0, "", "", "")
+		return r.writeStatus(ctx, &agent, "Disabled", "", "", false, 0, "", "", "")
 	}
 
 	names := resourceNames(agent.Name)
@@ -126,16 +126,69 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	ready := readyReplicas > 0
 	phase := "Pending"
+	reason, message := "", ""
 	if ready {
 		phase = "Ready"
+	} else {
+		// Look for an init container that failed and surface it. This makes
+		// `kubectl get agent` show "InitContainerFailed: git clone … fatal: Repository not found"
+		// instead of an opaque "Pending".
+		if r, m, found := r.inspectInitFailure(ctx, &agent); found {
+			phase = "Failed"
+			reason = r
+			message = m
+		}
 	}
-	if res, err := r.writeStatus(ctx, &agent, phase, ready, readyReplicas, deployName, svcName, pvcName); err != nil {
+	if res, err := r.writeStatus(ctx, &agent, phase, reason, message, ready, readyReplicas, deployName, svcName, pvcName); err != nil {
 		return res, err
 	}
 	if !ready {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 	return ctrl.Result{}, nil
+}
+
+// inspectInitFailure returns (reason, message, found) when any init container
+// across the agent's pods is in a non-transient failure state. We look at
+// both the current `terminated` state and the prior termination state under
+// CrashLoopBackOff — k8s puts the actual exit on lastTerminationState during
+// the backoff wait.
+func (r *AgentReconciler) inspectInitFailure(ctx context.Context, agent *v1alpha1.Agent) (string, string, bool) {
+	var pods corev1.PodList
+	if err := r.List(ctx, &pods, client.InNamespace(agent.Namespace), client.MatchingLabels{"vinculum.dev/agent": agent.Name}); err != nil {
+		return "", "", false
+	}
+	for i := range pods.Items {
+		p := &pods.Items[i]
+		for _, ic := range p.Status.InitContainerStatuses {
+			if t := ic.State.Terminated; t != nil && t.ExitCode != 0 {
+				return "InitContainerFailed", formatInitFailure(ic.Name, t.ExitCode, t.Reason, t.Message), true
+			}
+			if w := ic.State.Waiting; w != nil && (w.Reason == "CrashLoopBackOff" || w.Reason == "ImagePullBackOff" || w.Reason == "ErrImagePull") {
+				// For CrashLoop, prefer the last actual termination message;
+				// for Image*BackOff, the Waiting.Message is the kubelet's
+				// "Back-off pulling image…" string.
+				if lt := ic.LastTerminationState.Terminated; lt != nil && lt.ExitCode != 0 {
+					return "InitContainerFailed", formatInitFailure(ic.Name, lt.ExitCode, lt.Reason, lt.Message), true
+				}
+				return w.Reason, fmt.Sprintf("init container %q: %s", ic.Name, strings.TrimSpace(w.Message)), true
+			}
+		}
+	}
+	return "", "", false
+}
+
+func formatInitFailure(name string, exit int32, reason, message string) string {
+	tail := strings.TrimSpace(message)
+	if tail == "" {
+		tail = reason
+	}
+	// Compress to a single line and cap so it fits in `kubectl get` columns.
+	tail = strings.ReplaceAll(tail, "\n", " ")
+	if len(tail) > 280 {
+		tail = tail[:277] + "..."
+	}
+	return fmt.Sprintf("init %q exited %d: %s", name, exit, tail)
 }
 
 type agentNames struct {
@@ -568,6 +621,11 @@ fi
 		EnvFrom:         tokenEnvFrom,
 		VolumeMounts:    initMounts,
 		SecurityContext: agentSecurityContext(),
+		// FallbackToLogsOnError populates state.terminated.message with the
+		// container's last log lines on non-zero exit, without us having to
+		// scrape pod logs from the operator. Surfaces "could not read
+		// Username" / "Repository not found" into Agent.status.message.
+		TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
 	})
 
 	// Main container additions.
@@ -812,11 +870,19 @@ func (r *AgentReconciler) teardown(_ context.Context, _ *v1alpha1.Agent) error {
 	return nil
 }
 
-func (r *AgentReconciler) writeStatus(ctx context.Context, agent *v1alpha1.Agent, phase string, ready bool, readyReplicas int32, deployName, svcName, pvcName string) (ctrl.Result, error) {
+func (r *AgentReconciler) writeStatus(ctx context.Context, agent *v1alpha1.Agent, phase, reason, message string, ready bool, readyReplicas int32, deployName, svcName, pvcName string) (ctrl.Result, error) {
 	now := metav1.Now()
 	changed := false
 	if agent.Status.Phase != phase {
 		agent.Status.Phase = phase
+		changed = true
+	}
+	if agent.Status.Reason != reason {
+		agent.Status.Reason = reason
+		changed = true
+	}
+	if agent.Status.Message != message {
+		agent.Status.Message = message
 		changed = true
 	}
 	if agent.Status.Ready != ready {

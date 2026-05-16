@@ -104,6 +104,77 @@ func TestCreatePR_GitHubError(t *testing.T) {
 	}
 }
 
+func TestCreatePR_AlreadyExists_ReturnsExistingPR(t *testing.T) {
+	var listed bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/repos/acme/api/pulls":
+			w.WriteHeader(422)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"message": "Validation Failed",
+				"errors": []map[string]string{{
+					"resource": "PullRequest",
+					"code":     "custom",
+					"message":  "A pull request already exists for acme:feat/x.",
+				}},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/acme/api/pulls":
+			listed = true
+			if got := r.URL.Query().Get("head"); got != "acme:feat/x" {
+				t.Errorf("head query = %q", got)
+			}
+			if got := r.URL.Query().Get("base"); got != "main" {
+				t.Errorf("base query = %q", got)
+			}
+			_ = json.NewEncoder(w).Encode([]map[string]any{{
+				"html_url": "https://github.com/acme/api/pull/99",
+				"number":   99,
+			}})
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(404)
+		}
+	}))
+	defer srv.Close()
+
+	c := NewGitHubClient("ghp_test").WithBaseURL(srv.URL)
+	out, err := c.CreatePR(context.Background(), "acme", "api", GitHubPRRequest{
+		Title: "Feat: x", Head: "feat/x", Base: "main",
+	})
+	if err != nil {
+		t.Fatalf("expected idempotent success, got %v", err)
+	}
+	if !listed {
+		t.Error("expected the client to list existing PRs after 422")
+	}
+	if out.Number != 99 || out.HTMLURL != "https://github.com/acme/api/pull/99" {
+		t.Errorf("out=%+v", out)
+	}
+}
+
+func TestCreatePR_AlreadyExists_NoMatchingPR_StillErrors(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost:
+			w.WriteHeader(422)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"message": "A pull request already exists",
+			})
+		case r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode([]map[string]any{}) // empty
+		}
+	}))
+	defer srv.Close()
+
+	c := NewGitHubClient("ghp_test").WithBaseURL(srv.URL)
+	_, err := c.CreatePR(context.Background(), "a", "b", GitHubPRRequest{
+		Title: "x", Head: "h", Base: "b",
+	})
+	if err == nil {
+		t.Error("expected error when API says exists but list is empty")
+	}
+}
+
 func TestCreatePR_ValidatesArgs(t *testing.T) {
 	c := NewGitHubClient("")
 	if _, err := c.CreatePR(context.Background(), "a", "b", GitHubPRRequest{Title: "x", Head: "h", Base: "b"}); err == nil {

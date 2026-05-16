@@ -111,6 +111,8 @@ spec:
               type: object
               properties:
                 phase: {type: string}
+                reason: {type: string}
+                message: {type: string}
                 activeRuns: {type: integer}
                 assignedRuns:
                   type: array
