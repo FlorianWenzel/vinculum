@@ -39,12 +39,80 @@
       <a class="btn btn-primary" href="#install">Assimilate →</a>
       <a class="btn btn-ghost" href="https://github.com/FlorianWenzel/vinculum" target="_blank" rel="noopener">View source</a>
     </div>
-    <div class="demo">
-      <div class="bar">
-        <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
-        <span class="title">vnclm - zsh - 120×45</span>
+    <div class="hive-shell">
+      <svg class="hive" viewBox="0 0 800 420" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <defs>
+          <filter id="glow-soft" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2" result="blur"/>
+            <feMerge>
+              <feMergeNode in="blur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+          <filter id="glow-bright" x="-100%" y="-100%" width="300%" height="300%">
+            <feGaussianBlur stdDeviation="4" result="blur"/>
+            <feMerge>
+              <feMergeNode in="blur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+
+        <!-- Visible wires that also serve as motion paths via <mpath>. -->
+        <g class="wires" aria-hidden="true">
+          <path id="edge-you-master"     class="wire"          fill="none" d="M 92 90 C 180 90, 200 210, 232 210"/>
+          <path id="edge-master-a"       class="wire"          fill="none" d="M 280 195 C 360 195, 380 110, 452 110"/>
+          <path id="edge-master-b"       class="wire"          fill="none" d="M 288 210 L 452 210"/>
+          <path id="edge-master-g"       class="wire"          fill="none" d="M 280 225 C 360 225, 380 310, 452 310"/>
+          <path id="edge-a-github"       class="wire external" fill="none" d="M 488 110 C 560 110, 580 210, 678 210"/>
+          <path id="edge-b-github"       class="wire external" fill="none" d="M 488 210 L 678 210"/>
+          <path id="edge-g-github"       class="wire external" fill="none" d="M 488 310 C 560 310, 580 210, 678 210"/>
+          <path id="edge-master-you"     class="wire"          fill="none" d="M 232 200 C 200 200, 180 80, 92 80"/>
+        </g>
+
+        <g class="packets"></g>
+
+        <text id="gh-status" class="gh-status" x="700" y="172">PR #42 opened ✓</text>
+
+        <g class="nodes">
+          <g class="node node-you" data-node="you">
+            <circle class="bg" cx="80" cy="90" r="14"/>
+            <text class="label" x="80" y="125">you</text>
+            <text class="sub"   x="80" y="139">vnclm · webhook</text>
+          </g>
+          <g class="node node-master" data-node="master">
+            <circle class="bg" cx="260" cy="210" r="28"/>
+            <text class="label" x="260" y="258">locutus</text>
+            <text class="sub"   x="260" y="273">orchestrator</text>
+          </g>
+          <g class="node node-drone node-a" data-node="a">
+            <circle class="bg" cx="470" cy="110" r="18"/>
+            <text class="label" x="470" y="142">drone-α</text>
+            <text class="sub"   x="470" y="156">planner</text>
+          </g>
+          <g class="node node-drone node-b" data-node="b">
+            <circle class="bg" cx="470" cy="210" r="18"/>
+            <text class="label" x="470" y="242">drone-β</text>
+            <text class="sub"   x="470" y="256">engineer</text>
+          </g>
+          <g class="node node-drone node-g" data-node="g">
+            <circle class="bg" cx="470" cy="310" r="18"/>
+            <text class="label" x="470" y="342">drone-γ</text>
+            <text class="sub"   x="470" y="356">reviewer</text>
+          </g>
+          <g class="node node-github" data-node="github">
+            <circle class="bg" cx="700" cy="210" r="22"/>
+            <text class="label" x="700" y="245">github</text>
+            <text class="sub"   x="700" y="259">acme/api</text>
+          </g>
+        </g>
+      </svg>
+
+      <div class="legend">
+        <span><span class="swatch amber"></span>USER INPUT</span>
+        <span><span class="swatch green"></span>IN-CLUSTER MCP</span>
+        <span><span class="swatch cyan"></span>EXTERNAL GITHUB</span>
       </div>
-      <img src="assets/vnclm.gif" alt="vnclm CLI demo">
     </div>
   </div>
 </section>
@@ -558,6 +626,135 @@
     });
     host.appendChild(btn);
   });
+})();
+
+/* ============= Hero animation: the hive collaboration loop ============= */
+(() => {
+  const svg = document.querySelector('.hive');
+  if (!svg) return;
+  const SVG_NS   = 'http://www.w3.org/2000/svg';
+  const XLINK_NS = 'http://www.w3.org/1999/xlink';
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const packets  = svg.querySelector('.packets');
+  const ghStatus = svg.querySelector('#gh-status');
+
+  const css = getComputedStyle(document.documentElement);
+  const greenC = css.getPropertyValue('--borg').trim()  || '#00ff41';
+  const cyanC  = css.getPropertyValue('--cyan').trim()  || '#00e5ff';
+  const amberC = css.getPropertyValue('--amber').trim() || '#ffb000';
+
+  function pulse(nodeId, durMs = 700) {
+    const node = svg.querySelector(`[data-node="${nodeId}"]`);
+    if (!node) return;
+    node.classList.add('active');
+    setTimeout(() => node.classList.remove('active'), durMs);
+  }
+
+  function emitPacket(edgeId, opts = {}) {
+    const dur     = opts.dur     ?? 0.9;
+    const color   = opts.color   ?? greenC;
+    const r       = opts.r       ?? 4.5;
+    const reverse = opts.reverse ?? false;
+
+    const c = document.createElementNS(SVG_NS, 'circle');
+    c.setAttribute('r', r);
+    c.setAttribute('fill', color);
+    c.setAttribute('class', 'packet');
+    c.setAttribute('cx', 0);
+    c.setAttribute('cy', 0);
+
+    const anim = document.createElementNS(SVG_NS, 'animateMotion');
+    anim.setAttribute('dur', `${dur}s`);
+    anim.setAttribute('fill', 'remove');
+    anim.setAttribute('begin', 'indefinite');
+    if (reverse) {
+      // Travel the path tail-to-head — used for "response" packets that
+      // reuse the same path as the outbound delegation.
+      anim.setAttribute('keyPoints', '1;0');
+      anim.setAttribute('keyTimes', '0;1');
+      anim.setAttribute('calcMode', 'linear');
+    }
+
+    const mpath = document.createElementNS(SVG_NS, 'mpath');
+    mpath.setAttributeNS(XLINK_NS, 'href', `#${edgeId}`);
+    anim.appendChild(mpath);
+
+    c.appendChild(anim);
+    packets.appendChild(c);
+    anim.beginElement();
+    anim.addEventListener('endEvent', () => c.remove());
+  }
+
+  let labelTimer = null;
+  function showStatus(text, durMs = 1700) {
+    if (!ghStatus) return;
+    if (labelTimer) clearTimeout(labelTimer);
+    ghStatus.textContent = text;
+    ghStatus.classList.add('show');
+    labelTimer = setTimeout(() => ghStatus.classList.remove('show'), durMs);
+  }
+
+  // Sequential 3-stage collaboration. Each drone's github push is followed
+  // by a return packet to locutus, mirroring how vnclm-mcp's wait_task
+  // returns task status to the master agent.
+  const timeline = [
+    { at: 0.10, fn: () => emitPacket('edge-you-master', { dur: 1.0, color: amberC }) },
+    { at: 1.05, fn: () => pulse('master', 800) },
+
+    { at: 1.70, fn: () => emitPacket('edge-master-a') },
+    { at: 2.55, fn: () => pulse('a', 800) },
+    { at: 3.25, fn: () => emitPacket('edge-a-github', { dur: 0.9, color: cyanC, r: 5 }) },
+    { at: 4.20, fn: () => { pulse('github', 1000); showStatus('ISSUE #17 OPENED'); } },
+    { at: 4.75, fn: () => emitPacket('edge-master-a', { reverse: true, dur: 0.8 }) },
+    { at: 5.50, fn: () => pulse('master', 450) },
+
+    { at: 6.10, fn: () => emitPacket('edge-master-b') },
+    { at: 6.95, fn: () => pulse('b', 800) },
+    { at: 7.60, fn: () => emitPacket('edge-b-github', { dur: 0.9, color: cyanC, r: 5 }) },
+    { at: 8.50, fn: () => { pulse('github', 1000); showStatus('PR #42 OPENED'); } },
+    { at: 9.05, fn: () => emitPacket('edge-master-b', { reverse: true, dur: 0.8 }) },
+    { at: 9.80, fn: () => pulse('master', 450) },
+
+    { at: 10.40, fn: () => emitPacket('edge-master-g') },
+    { at: 11.25, fn: () => pulse('g', 800) },
+    { at: 11.95, fn: () => emitPacket('edge-g-github', { dur: 0.9, color: cyanC, r: 5 }) },
+    { at: 12.85, fn: () => { pulse('github', 1100); showStatus('REVIEW APPROVED ✓'); } },
+    { at: 13.40, fn: () => emitPacket('edge-master-g', { reverse: true, dur: 0.8 }) },
+    { at: 14.15, fn: () => pulse('master', 450) },
+
+    { at: 14.85, fn: () => pulse('master', 900) },
+    { at: 15.50, fn: () => emitPacket('edge-master-you', { dur: 1.0, color: amberC }) },
+    { at: 16.55, fn: () => pulse('you', 700) },
+  ];
+
+  const cycleDur = 18.5;
+  let cycleStart = performance.now();
+  let nextIdx    = 0;
+
+  function frame(now) {
+    const elapsed = (now - cycleStart) / 1000;
+    if (elapsed >= cycleDur) {
+      cycleStart = now;
+      nextIdx = 0;
+    } else {
+      while (nextIdx < timeline.length && timeline[nextIdx].at <= elapsed) {
+        timeline[nextIdx].fn();
+        nextIdx++;
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  if (reduceMotion) {
+    pulse('master');
+    setTimeout(() => pulse('a'), 600);
+    setTimeout(() => pulse('b'), 1200);
+    setTimeout(() => pulse('g'), 1800);
+    setTimeout(() => { pulse('github'); showStatus('REVIEW APPROVED ✓', 4000); }, 2400);
+  } else {
+    requestAnimationFrame(frame);
+  }
 })();
 </script>
 
