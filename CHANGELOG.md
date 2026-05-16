@@ -9,6 +9,24 @@ Release artifacts and one-line summaries also live on the
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-05-16
+
+### Fixed
+- **CI: no more clobbered image tags.** `:<appVersion>` (e.g. `:0.5.0`)
+  was previously produced by both main pushes AND `v*` tag pushes,
+  yielding two different image bytes at the same tag. With kubelet's
+  `IfNotPresent` pull policy, nodes kept the first one cached and a
+  fresh `helm upgrade` quietly kept running the older binary. The
+  appVersion tag is now produced **only by tag pushes**.
+  Main pushes still produce `:latest`, `:sha-<short>`, and `:main`.
+
+### Docs
+- New "Upgrading an existing install" section in `Deployment.md`
+  covering pinned-image agents (`spec.image: …:tilt-dev` etc.) and the
+  digest-pinning escape hatch when you suspect a stale tag.
+
+[Release notes](https://github.com/FlorianWenzel/vinculum/releases/tag/v0.5.1)
+
 ## [0.5.0] — 2026-05-16
 
 ### Added

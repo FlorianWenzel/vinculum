@@ -48,6 +48,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # NOTE: the appVersion-tagged image (e.g. :0.5.0) is built ONLY on
+      # tag pushes (via the type=semver rule). Main pushes produce :latest,
+      # :sha-<short>, and :main, but deliberately NOT :<appVersion>. This
+      # avoids the gotcha where a main push and a v0.5.0 tag push each
+      # tag :0.5.0 with different image bytes — kubelet caches the first
+      # pull and never sees the second, so a fresh `helm upgrade` keeps
+      # running the older binary at the same tag.
       - name: Extract image metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -55,7 +62,6 @@ jobs:
           images: ghcr.io/${{ env.owner_lc }}/${{ matrix.image }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ env.app_version }},enable={{is_default_branch}}
             type=ref,event=branch
             type=ref,event=tag
             type=sha

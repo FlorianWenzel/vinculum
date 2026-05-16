@@ -39,7 +39,7 @@ File: `.github/workflows/publish-images.yaml`
 
 - Runs on pushes to `main` and tag pushes matching `v*`.
 - Builds and pushes two images: operator, agent.
-- Tags: `latest` on default branch, `appVersion` from `helm/vinculum/Chart.yaml`, branch name, git tag, `sha-*`, and semver.
+- Tags: `latest` on default branch, branch name, git tag, `sha-*`, and semver. The `:<appVersion>` (e.g. `:0.5.1`) tag is produced **only by `v*` tag pushes** — main pushes don't claim it, to prevent two builds racing the same tag.
 
 ### 4. CLI publishing
 
@@ -53,14 +53,41 @@ File: `.github/workflows/publish-cli.yaml`
 The chart leaves first-party image tags empty in `helm/vinculum/values.yaml`. Templates fall back to `.Chart.AppVersion`.
 
 Operational meaning:
-- Installing chart version `0.5.0` uses app images tagged `0.5.0` by default.
+- Installing chart version `0.5.1` uses app images tagged `0.5.1` by default.
 - Chart `version` controls the package version.
 - Chart `appVersion` controls the default first-party image tag.
+- Image tags `:<semver>` are produced **only by `v*` tag pushes**. Main pushes
+  build `:latest` + `:sha-<short>` + `:main`, but not the appVersion tag.
+  Prevents the cache hazard where two builds (main + tag) clobber the same
+  `:X.Y.Z` and kubelet keeps the first one it cached.
+
+## Upgrading an existing install
+
+`helm upgrade --install` is idempotent on the chart, but agent pods with
+`spec.image` pinned to a fixed tag (e.g. `:tilt-dev` for local dev, or a
+hardcoded `:0.5.1`) won't auto-track when the chart's appVersion bumps:
+
+1. **Recommended** — leave `Agent.spec.image` empty in your manifests so
+   the operator falls back to its `AGENT_DEFAULT_IMAGE` env (the chart's
+   `defaultAgentImage`). Then `helm upgrade` plus an operator restart
+   propagates to every agent's next reconcile.
+2. **Pinned-image** — `kubectl patch agent <name> --type=merge \
+   -p '{"spec":{"image":"ghcr.io/florianwenzel/vinculum-agent:0.5.1"}}'`
+   then `kubectl rollout restart deploy/agent-<name>`.
+
+`imagePullPolicy: IfNotPresent` (the chart default) means nodes that
+cached a tag don't re-pull. If you suspect a stale-tag situation,
+pin by digest:
+
+```bash
+kubectl set image deploy/vinculum-operator \
+  operator=ghcr.io/florianwenzel/vinculum-operator@sha256:<digest>
+```
 
 ## Published endpoints
 
 ```bash
-helm install vinculum oci://ghcr.io/florianwenzel/helm/vinculum --version 0.5.0 -n vinculum-system --create-namespace
+helm install vinculum oci://ghcr.io/florianwenzel/helm/vinculum --version 0.5.1 -n vinculum-system --create-namespace
 ```
 
 GHCR namespace:
@@ -73,7 +100,7 @@ GHCR namespace:
 2. Commit, merge to `main` — images + chart publish.
 3. Tag the commit `vX.Y.Z` and push the tag — CLI binaries publish to a GitHub release, images get the tag.
 
-For app-only changes: merging to `main` publishes fresh images under the existing `appVersion` (plus `latest`, `sha-*`).
+For app-only changes: merging to `main` publishes fresh images at `:latest` + `:sha-<short>` + `:main`. The immutable `:<appVersion>` tag is not republished until you push a new `v*` tag.
 
 ## Pre-release checks
 
