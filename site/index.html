@@ -32,7 +32,7 @@
 
 <section class="hero">
   <div class="wrap">
-    <div class="status">HIVE_STATUS: ONLINE · v0.1.0</div>
+    <div class="status">HIVE_STATUS: ONLINE · v0.2.0</div>
     <h1>The collective<br>for AI coding agents.</h1>
     <p class="tagline">Long-lived <em>crush</em> agents running as Kubernetes Deployments. One operator. Many drones. One shared link - the vinculum.</p>
     <div class="cta">
@@ -131,7 +131,7 @@
           <h3>Install the chart</h3>
           <p>Helm OCI install - no repo add, no values overrides required for a default run.</p>
 <pre><span class="cmd">helm</span> install vinculum <span class="flag">oci://</span>ghcr.io/florianwenzel/helm/vinculum \
-  <span class="flag">--version</span> 0.1.0 \
+  <span class="flag">--version</span> 0.2.0 \
   <span class="flag">-n</span> vinculum-system <span class="flag">--create-namespace</span></pre>
         </div>
       </div>
@@ -190,6 +190,60 @@
 <span class="cmd">vnclm</span> logs &lt;task&gt;                                    <span class="flag">[-f]</span>
 <span class="cmd">vnclm</span> run <span class="str">"&lt;prompt&gt;"</span>  <span class="flag">[--agent]</span> <span class="flag">[--fresh]</span> <span class="flag">[--timeout N]</span></pre>
     </div>
+  </div>
+</section>
+
+<section id="orchestrator">
+  <div class="wrap">
+    <div class="eyebrow">Hive mind</div>
+    <h2>Drones that command drones.</h2>
+    <p class="lede">Flip <code>orchestrator: true</code> on any Agent and it becomes a master. A stdio MCP server baked into the image — <code>vnclm-mcp</code> — wires the operator's in-cluster API into the running crush session, so the LLM can decompose work and farm it out to peer drones.</p>
+
+    <dl class="tools">
+      <div><dt>list_agents</dt><dd>Enumerate the collective. Name, model, phase, readiness.</dd></div>
+      <div><dt>dispatch_task</dt><dd>Create a Task against a peer Agent. Returns the new Task name immediately. Refuses self-dispatch.</dd></div>
+      <div><dt>get_task</dt><dd>Read the current phase plus <code>stdoutTail</code> / <code>stderrTail</code> / <code>exitCode</code>.</dd></div>
+      <div><dt>wait_task</dt><dd>Block until <code>Succeeded</code> / <code>Failed</code> / <code>TimedOut</code>, or hit <code>timeoutSeconds</code>.</dd></div>
+      <div><dt>get_task_logs</dt><dd>Stream the peer pod's recent crush output for a Task.</dd></div>
+      <div><dt>cancel_task</dt><dd>Delete a Task. Cancels in-flight execution.</dd></div>
+    </dl>
+
+    <div class="codeblock">
+      <div class="head">
+        <span>Declare a master + worker</span>
+        <span class="lang">yaml</span>
+      </div>
+<pre><span class="cmt"># bundled stdio MCP — the binary ships in the agent image</span>
+<span class="key">apiVersion:</span> vinculum.dev/v1alpha1
+<span class="key">kind:</span> MCPServer
+<span class="key">metadata:</span>
+  <span class="key">name:</span> vinculum
+<span class="key">spec:</span>
+  <span class="key">command:</span> vnclm-mcp
+  <span class="key">enabled:</span> <span class="num">true</span>
+---
+<span class="cmt"># worker — runs whatever locutus delegates to it</span>
+<span class="key">apiVersion:</span> vinculum.dev/v1alpha1
+<span class="key">kind:</span> Agent
+<span class="key">metadata:</span>
+  <span class="key">name:</span> drone-7
+<span class="key">spec:</span>
+  <span class="key">model:</span> <span class="str">openrouter/anthropic/claude-haiku-4.5</span>
+  <span class="key">providerSecretRef:</span> { <span class="key">name:</span> openrouter-provider-keys }
+---
+<span class="cmt"># master — orchestrator flag flips on VINCULUM_OPERATOR_URL + the MCP</span>
+<span class="key">apiVersion:</span> vinculum.dev/v1alpha1
+<span class="key">kind:</span> Agent
+<span class="key">metadata:</span>
+  <span class="key">name:</span> locutus
+<span class="key">spec:</span>
+  <span class="key">orchestrator:</span> <span class="num">true</span>
+  <span class="key">model:</span> <span class="str">openrouter/anthropic/claude-sonnet-4.6</span>
+  <span class="key">providerSecretRef:</span> { <span class="key">name:</span> openrouter-provider-keys }
+  <span class="key">mcpServerRefs:</span> [vinculum]</pre>
+    </div>
+
+    <p class="aside"><span class="aside-tag">Trust boundary</span> The operator's in-cluster API has no auth — the namespace is the trust boundary. The <code>orchestrator</code> flag gates env injection, not network reachability. Isolate orchestrators in their own namespace when stricter separation matters.</p>
   </div>
 </section>
 

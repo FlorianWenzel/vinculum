@@ -22,13 +22,16 @@
 
 Vinculum runs long-lived [`charmbracelet/crush`](https://github.com/charmbracelet/crush) agents as Kubernetes Deployments. Each **Agent** is a pod that holds an open crush session and serves a small HTTP API. Submit **Tasks** against an Agent; they execute serially in-pod, reuse the same workspace PVC, and preserve conversation history across restarts.
 
+Flip `spec.orchestrator: true` on an Agent and it becomes a **master**: a bundled stdio MCP server (`vnclm-mcp`) wires the operator's API into the running crush session, so the LLM can `dispatch_task` / `wait_task` against peer Agents in the cluster. Hive mind out of the box.
+
 One operator. Many agents. One shared link — the vinculum.
 
 ## Why
 
 - **Long-lived sessions.** A pod per Agent — no per-prompt pod cold-start, and the crush session + `/workspace` PVC survive restarts.
-- **Kube-native.** Declarative `Agent`, `Task`, `AgentSchedule` CRDs. One operator reconciles them into Deployments, PVCs, RBAC, Services.
-- **Multi-provider.** Azure OpenAI, Anthropic, OpenAI, or bring-your-own — a provider is just a labeled Secret.
+- **Kube-native.** Declarative `Agent`, `Task`, `AgentSchedule`, `MCPServer` CRDs. One operator reconciles them into Deployments, PVCs, RBAC, Services.
+- **Multi-provider.** Azure OpenAI, Anthropic, OpenAI, OpenRouter, or bring-your-own — a provider is just a labeled Secret.
+- **Hive mind.** Set `orchestrator: true` on an Agent and it can dispatch Tasks to its peers via the bundled `vnclm-mcp` stdio bridge. Master agents talk to the operator API in-cluster; no extra plumbing.
 - **One binary CLI.** `vnclm` port-forwards through your active kubecontext — no exposed operator endpoint, no long-lived local state.
 
 ## Architecture
@@ -56,13 +59,14 @@ flowchart LR
 
 | Component | Path | Purpose |
 |-----------|------|---------|
-| **Operator** | [`apps/operator`](apps/operator) | Reconciles `Agent`, `Task`, `AgentSchedule` CRDs into Deployments/PVCs/Secrets. Internal HTTP API on `:8084` for `vnclm`. |
+| **Operator** | [`apps/operator`](apps/operator) | Reconciles `Agent`, `Task`, `AgentSchedule`, `MCPServer` CRDs into Deployments/PVCs/Secrets. Internal HTTP API on `:8084` for `vnclm` and for in-cluster orchestrator agents. |
 | **vinculum-agent** | [`apps/vinculum-agent`](apps/vinculum-agent) | Runs inside each Agent pod. Supervises `crush server`, exposes `:8090` for task dispatch + log streaming, patches `Task.status`. |
+| **vnclm-mcp** | [`apps/vnclm-mcp`](apps/vnclm-mcp) | Stdio MCP server baked into the agent image. Auto-loaded on Agents with `spec.orchestrator: true`. Exposes `list_agents` / `dispatch_task` / `wait_task` / `get_task` / `get_task_logs` / `cancel_task` to the running LLM. |
 | **vnclm** | [`apps/vnclm`](apps/vnclm) | CLI with port-forward client, interactive wizards, live log streaming, shell completion. |
 
 ## Custom Resources
 
-- **`Agent`** — declares a long-running agent. Fields: model, provider secret ref, instructions, workspace size, `mcpServerRefs`. Operator creates a Deployment (replicas=1, `Recreate`), Service, PVC, RBAC.
+- **`Agent`** — declares a long-running agent. Fields: model, provider secret ref, instructions, workspace size, `mcpServerRefs`, `orchestrator`. Operator creates a Deployment (replicas=1, `Recreate`), Service, PVC, RBAC. With `orchestrator: true` the operator injects `VINCULUM_OPERATOR_URL` so the bundled `vnclm-mcp` can reach the operator API in-cluster.
 - **`Task`** — unit of work for an Agent. Fields: `prompt`, `fresh`, `workspace.mode` (`shared` | `ephemeral`), `timeoutSeconds`, `artifacts`, `env`. Tasks run serially inside the Agent pod; shared workspace by default so edits accumulate.
 - **`AgentSchedule`** — cron trigger that stamps `Task`s from a template. Concurrency: `Allow` | `Forbid` | `Replace`.
 - **`MCPServer`** — reusable MCP (Model Context Protocol) server definition. Attach to any Agent via `spec.mcpServerRefs: [name, ...]`. Rendered into the agent's `crush.json`; `secretRef` is mounted as `envFrom` on the agent pod so stdio processes inherit credentials.
@@ -87,13 +91,81 @@ vnclm get mcp                       # NAME | TYPE | TARGET | SECRET | ENABLED | 
 
 Manifest form: [`.local/mcp-filesystem.yaml`](.local/mcp-filesystem.yaml), [`.local/mcp-github.yaml`](.local/mcp-github.yaml), [`.local/agent-with-mcp.yaml`](.local/agent-with-mcp.yaml).
 
+## Orchestrator agents
+
+Set `spec.orchestrator: true` on an Agent and it gains the ability to drive other Agents. The bundled `vnclm-mcp` stdio server (already on the agent image) talks to the operator's in-cluster API and exposes six tools to the running crush session:
+
+| Tool | What it does |
+|---|---|
+| `list_agents` | List peers in the cluster — name, model, phase, readiness, orchestrator flag. |
+| `dispatch_task` | Create a Task against a peer Agent. Returns immediately. Refuses self-dispatch. |
+| `get_task` | Read current phase plus `stdoutTail` / `stderrTail` / `exitCode`. |
+| `wait_task` | Poll until the Task is `Succeeded` / `Failed` / `TimedOut`, or hits `timeoutSeconds`. |
+| `get_task_logs` | Stream the peer pod's recent log output for a Task. |
+| `cancel_task` | Delete a Task. Cancels in-flight execution. |
+
+```mermaid
+flowchart LR
+    user(["👤 user"])
+    master["master Agent<br/>(orchestrator: true)"]
+    mcp["vnclm-mcp"]
+    op["Operator API<br/>:8084"]
+    peer["peer Agent"]
+
+    user -- "vnclm run" --> master
+    master -- "stdio (LLM calls)" --> mcp
+    mcp -- "POST /api/tasks" --> op
+    op -- "creates Task → POST /task" --> peer
+    peer -- "patch Task.status" --> op
+    op -- "GET /api/tasks/<name>" --> mcp
+```
+
+Minimal setup — bundled MCPServer + one orchestrator + one worker:
+
+```yaml
+apiVersion: vinculum.dev/v1alpha1
+kind: MCPServer
+metadata: { name: vinculum, namespace: vinculum-system }
+spec: { command: vnclm-mcp, enabled: true }
+---
+apiVersion: vinculum.dev/v1alpha1
+kind: Agent
+metadata: { name: drone-7, namespace: vinculum-system }
+spec:
+  model: openrouter/anthropic/claude-haiku-4.5
+  providerSecretRef: { name: openrouter-provider-keys }
+---
+apiVersion: vinculum.dev/v1alpha1
+kind: Agent
+metadata: { name: locutus, namespace: vinculum-system }
+spec:
+  orchestrator: true
+  model: openrouter/anthropic/claude-sonnet-4.6
+  providerSecretRef: { name: openrouter-provider-keys }
+  mcpServerRefs: [vinculum]
+  instructionInline:
+    fileName: AGENTS.md
+    content: |
+      You orchestrate work across peer agents using the vinculum MCP tools.
+      Decompose, dispatch, wait, synthesize. Never dispatch a Task to yourself.
+```
+
+```bash
+vnclm ctx set-agent locutus
+vnclm run "Ask drone-7 for a haiku about the Borg collective, then refine it."
+```
+
+Full example: [`.local/master-agent.yaml`](.local/master-agent.yaml).
+
+**Note on auth.** Inside the cluster the operator's `:8084` API has no auth; the operator Service URL is reachable from any pod in the namespace. Treat the namespace as the trust boundary. The `orchestrator` flag is the declarative knob — it gates env injection, not network access — so prefer running orchestrators in their own namespace if you need stricter isolation.
+
 ## Quick start
 
 ### 1. Install the chart
 
 ```bash
 helm install vinculum oci://ghcr.io/florianwenzel/helm/vinculum \
-  --version 0.1.0 \
+  --version 0.2.0 \
   -n vinculum-system --create-namespace
 ```
 
@@ -111,7 +183,7 @@ brew install FlorianWenzel/vinculum/vnclm
 **Prebuilt binary** (macOS / Linux / Windows — amd64 / arm64):
 
 ```bash
-VERSION=v0.1.0
+VERSION=v0.2.0
 OS=darwin      # linux | darwin | windows
 ARCH=arm64     # amd64 | arm64
 curl -L -o vnclm \

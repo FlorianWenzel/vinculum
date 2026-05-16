@@ -409,6 +409,64 @@ section p.lede {
 .codeblock .cmd { color: var(--borg-2); }
 .codeblock .flag { color: var(--cyan); }
 .codeblock .str { color: var(--amber); }
+.codeblock .key { color: var(--cyan); }
+.codeblock .num { color: var(--amber); }
+
+/* Orchestrator tools list */
+.tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+  margin: 0 0 36px;
+}
+.tools > div {
+  padding: 18px 22px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: border-color 0.15s;
+}
+.tools > div:hover { border-color: var(--border-hot); }
+.tools dt {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--borg-2);
+  margin-bottom: 6px;
+}
+.tools dd {
+  color: var(--fg-dim);
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0;
+}
+.tools dd code {
+  color: var(--cyan);
+  font-size: 12.5px;
+}
+
+/* Inline aside note */
+.aside {
+  margin-top: 28px;
+  padding: 16px 20px;
+  border-left: 2px solid var(--border-hot);
+  background: linear-gradient(90deg, rgba(0,255,65,0.04), transparent);
+  border-radius: 0 8px 8px 0;
+  color: var(--fg-dim);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.aside .aside-tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-right: 10px;
+}
+.aside code { color: var(--borg-2); font-size: 13px; }
 
 /* Quote */
 .quote {
