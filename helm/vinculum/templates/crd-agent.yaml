@@ -80,6 +80,7 @@ spec:
                 enabled: {type: boolean}
                 workspaceSize: {type: string}
                 workspaceStorageClass: {type: string}
+                orchestrator: {type: boolean}
             status:
               type: object
               properties:

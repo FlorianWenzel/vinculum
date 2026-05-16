@@ -22,6 +22,8 @@ spec:
               value: {{ .Release.Namespace | quote }}
             - name: AGENT_DEFAULT_IMAGE
               value: {{ printf "%s:%s" .Values.operator.defaultAgentImage.repository (default .Chart.AppVersion .Values.operator.defaultAgentImage.tag) | quote }}
+            - name: OPERATOR_URL
+              value: {{ printf "http://vinculum-operator.%s.svc:8084" .Release.Namespace | quote }}
           resources:
             requests:
               cpu: 50m

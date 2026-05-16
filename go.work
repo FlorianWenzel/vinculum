@@ -2,3 +2,4 @@ go 1.24.3
 
 use ./apps/vinculum-agent
 use ./apps/operator
+use ./apps/vnclm-mcp

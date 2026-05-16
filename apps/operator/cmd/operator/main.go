@@ -58,7 +58,7 @@ func main() {
 	agentReconciler := &controllers.AgentReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Cfg:    controllers.AgentReconcilerConfig{AgentDefaultImage: cfg.AgentDefaultImage},
+		Cfg:    controllers.AgentReconcilerConfig{AgentDefaultImage: cfg.AgentDefaultImage, OperatorURL: cfg.OperatorURL},
 	}
 	taskReconciler := &controllers.TaskReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}
 	scheduleReconciler := &controllers.AgentScheduleReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}

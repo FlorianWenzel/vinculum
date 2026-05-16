@@ -39,6 +39,7 @@ type AgentReconciler struct {
 
 type AgentReconcilerConfig struct {
 	AgentDefaultImage string
+	OperatorURL       string
 }
 
 func chooseAgentImage(specImage, defaultImage string) string {
@@ -422,18 +423,25 @@ func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.
 	if instructionMount == "" {
 		instructionMount = "/etc/vinculum"
 	}
+	// crush follows XDG: it reads its config from $XDG_CONFIG_HOME/crush/crush.json.
+	// Mount the rendered ConfigMap at that subdir so crush actually finds crush.json
+	// (and MCP servers like the vinculum stdio bridge get loaded).
+	configMount := instructionMount + "/crush"
 
 	envVars := []corev1.EnvVar{
 		{Name: "AGENT_NAME", Value: agent.Name},
 		{Name: "AGENT_NAMESPACE", Value: agent.Namespace},
 		{Name: "WORKSPACE_ROOT", Value: "/workspace"},
 		{Name: "XDG_DATA_HOME", Value: "/workspace/.crush-data"},
-		{Name: "XDG_CONFIG_HOME", Value: "/etc/vinculum"},
+		{Name: "XDG_CONFIG_HOME", Value: instructionMount},
 		{Name: "CRUSH_SOCKET", Value: "/tmp/crush.sock"},
 		{Name: "SERVER_ADDR", Value: fmt.Sprintf(":%d", agentPort)},
 	}
 	if agent.Spec.InstructionInline != nil && agent.Spec.InstructionInline.FileName != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: "INSTRUCTION_FILE", Value: instructionMount + "/" + agent.Spec.InstructionInline.FileName})
+		envVars = append(envVars, corev1.EnvVar{Name: "INSTRUCTION_FILE", Value: configMount + "/" + agent.Spec.InstructionInline.FileName})
+	}
+	if agent.Spec.Orchestrator && r.Cfg.OperatorURL != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: "VINCULUM_OPERATOR_URL", Value: r.Cfg.OperatorURL})
 	}
 	for k, v := range agent.Spec.Env {
 		envVars = append(envVars, corev1.EnvVar{Name: k, Value: v})
@@ -501,7 +509,7 @@ func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.
 						}},
 						VolumeMounts: []corev1.VolumeMount{
 							{Name: "workspace", MountPath: "/workspace"},
-							{Name: "config", MountPath: instructionMount},
+							{Name: "config", MountPath: configMount},
 							{Name: "tmp", MountPath: "/tmp"},
 						},
 						Resources: corev1.ResourceRequirements{

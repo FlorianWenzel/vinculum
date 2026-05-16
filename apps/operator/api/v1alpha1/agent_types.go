@@ -43,6 +43,10 @@ type AgentSpec struct {
 	Enabled               bool              `json:"enabled"`
 	WorkspaceSize         string            `json:"workspaceSize,omitempty"`
 	WorkspaceStorageClass *string           `json:"workspaceStorageClass,omitempty"`
+	// Orchestrator, when true, exposes operator API coordinates to the agent pod
+	// (VINCULUM_OPERATOR_URL) so the agent can dispatch Tasks to peer Agents via
+	// the vinculum MCP server.
+	Orchestrator bool `json:"orchestrator,omitempty"`
 }
 
 type AgentStatus struct {

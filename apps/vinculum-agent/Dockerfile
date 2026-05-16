@@ -14,10 +14,18 @@ COPY apps/vinculum-agent ./apps/vinculum-agent
 WORKDIR /src/apps/vinculum-agent
 RUN GOWORK=off CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOHOSTARCH)} go build -o /out/vinculum-agent ./cmd/vinculum-agent
 
+# vnclm-mcp: stdio MCP server that exposes the operator API to crush sessions
+# in orchestrator-mode pods. Baked into the same image so the existing
+# MCPServer/crush.json plumbing can launch it via command: vnclm-mcp.
+WORKDIR /src
+COPY apps/vnclm-mcp ./apps/vnclm-mcp
+WORKDIR /src/apps/vnclm-mcp
+RUN GOWORK=off CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOHOSTARCH)} go build -o /out/vnclm-mcp ./cmd/vnclm-mcp
+
 FROM debian:bookworm-slim
 
 ARG TARGETARCH
-ARG CRUSH_VERSION=0.60.0
+ARG CRUSH_VERSION=0.69.1
 
 ENV DEBIAN_FRONTEND=noninteractive \
     WORK_DIR=/workspace \
@@ -47,6 +55,7 @@ RUN set -eux; \
 RUN useradd -m -u 10001 -s /bin/bash agent
 
 COPY --from=build /out/vinculum-agent /usr/local/bin/vinculum-agent
+COPY --from=build /out/vnclm-mcp /usr/local/bin/vnclm-mcp
 
 RUN mkdir -p /workspace /instructions \
       /home/agent/.ssh \

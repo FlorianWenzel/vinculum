@@ -62,6 +62,7 @@ func newAPIMux(k8s client.Client, namespace string, cfg appconfig.Config) *http.
 				Env               map[string]string          `json:"env"`
 				Enabled           *bool                      `json:"enabled"`
 				WorkspaceSize     string                     `json:"workspaceSize"`
+				Orchestrator      bool                       `json:"orchestrator"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
 				jsonError(w, http.StatusBadRequest, err.Error())
@@ -95,6 +96,7 @@ func newAPIMux(k8s client.Client, namespace string, cfg appconfig.Config) *http.
 					Env:                  spec.Env,
 					Enabled:              enabled,
 					WorkspaceSize:        spec.WorkspaceSize,
+					Orchestrator:         spec.Orchestrator,
 				},
 			}
 			if err := k8s.Create(ctx, obj); err != nil {

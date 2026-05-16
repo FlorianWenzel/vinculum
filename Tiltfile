@@ -12,7 +12,7 @@ k8s_namespace(system_ns)
 local_resource(
     'agent-image',
     cmd='docker build -t vinculum-agent:tilt-dev -f apps/vinculum-agent/Dockerfile .',
-    deps=['apps/vinculum-agent'],
+    deps=['apps/vinculum-agent', 'apps/vnclm-mcp'],
 )
 
 docker_build(
@@ -30,6 +30,18 @@ k8s_yaml(helm('helm/vinculum', name='vinculum', namespace=system_ns, set=[
 k8s_resource('vinculum-operator', port_forwards=['8084:8084'])
 
 # Provider secrets from .tilt-secrets/ (gitignored).
+openrouter_key = str(read_file('.tilt-secrets/openrouter-api-key', default='')).strip()
+if openrouter_key:
+    k8s_yaml(blob("""apiVersion: v1
+kind: Secret
+metadata:
+  name: openrouter-provider-keys
+  namespace: %s
+type: Opaque
+stringData:
+  OPENROUTER_API_KEY: %s
+""" % (system_ns, openrouter_key)))
+
 azure_key = str(read_file('.tilt-secrets/azure-openai-api-key', default='')).strip()
 azure_endpoint = str(read_file('.tilt-secrets/azure-openai-endpoint', default='')).strip()
 if azure_key and azure_endpoint:

@@ -172,7 +172,7 @@ func (e *Executor) ensureInstructions(workdir string) {
 
 func (e *Executor) runCrush(ctx context.Context, state *tasks.State, workdir, prompt string, withContinue bool) (string, string, int, error) {
 	e.ensureInstructions(workdir)
-	args := []string{"run", "--yolo"}
+	args := []string{"run"}
 	if e.cfg.CrushQuiet {
 		args = append(args, "--quiet")
 	}
