@@ -7,3 +7,18 @@ operator:
     repository: ghcr.io/florianwenzel/vinculum-agent
     tag: ""
   namespaceScoped: true
+
+# Opt-in NetworkPolicy for agent pods. When enabled, agents can reach
+# kube-dns, the in-cluster operator service, plus public HTTPS / SSH
+# (for LLM APIs + git). All other egress is blocked.
+#
+# Disabled by default — many small clusters don't run a NetworkPolicy
+# controller, and turning it on without one is a footgun (no enforcement
+# but lots of confusing manifests).
+networkPolicy:
+  enabled: false
+  # Extra CIDRs to allow egress to on any port (e.g. private git hosts).
+  extraEgressCIDRs: []
+  # Extra namespaceSelectors to allow egress to (e.g. internal services
+  # the agents call out to).
+  extraEgressNamespaces: []

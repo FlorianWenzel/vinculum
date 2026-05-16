@@ -18,6 +18,7 @@ type TaskSpec struct {
 	Artifacts      *ArtifactSink     `json:"artifacts,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	TimeoutSeconds int32             `json:"timeoutSeconds,omitempty"`
+	Model          string            `json:"model,omitempty"`
 	Git            *TaskGit          `json:"git,omitempty"`
 }
 

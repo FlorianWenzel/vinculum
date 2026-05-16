@@ -10,16 +10,27 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
 type Client struct {
-	base string
-	hc   *http.Client
+	base     string
+	hc       *http.Client
+	fromName string // pod's AGENT_NAME — emitted as X-Vinculum-From-Agent
 }
 
 func New(base string) *Client {
 	return &Client{base: base, hc: &http.Client{Timeout: 30 * time.Second}}
+}
+
+// WithFromAgent tags subsequent POST /api/tasks calls with the orchestrator
+// agent's name via the X-Vinculum-From-Agent header. The operator uses it
+// to label the vinculum_orchestrator_dispatches_total metric.
+func (c *Client) WithFromAgent(name string) *Client {
+	cp := *c
+	cp.fromName = strings.TrimSpace(name)
+	return &cp
 }
 
 // Agent is a partial mirror of v1alpha1.Agent — only the fields the master
@@ -244,6 +255,9 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.fromName != "" && method == http.MethodPost {
+		req.Header.Set("X-Vinculum-From-Agent", c.fromName)
 	}
 	resp, err := c.hc.Do(req)
 	if err != nil {

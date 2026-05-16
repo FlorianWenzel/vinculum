@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -18,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1alpha1 "github.com/florian/vinculum/apps/operator/api/v1alpha1"
+	vmetrics "github.com/florian/vinculum/apps/operator/internal/metrics"
 )
 
 const (
@@ -30,6 +32,34 @@ type TaskReconciler struct {
 	client.Client
 	Scheme     *runtime.Scheme
 	HTTPClient *http.Client
+	// metricsRecorded tracks UIDs of Tasks whose terminal metrics have
+	// already been emitted, so the per-reconcile observation doesn't
+	// double-count on repeated reconciles. Operator restart resets the
+	// map; that's acceptable (old terminal Tasks shouldn't keep emitting
+	// new samples anyway).
+	metricsRecorded sync.Map
+}
+
+// recordTerminalMetrics observes the Task's duration and increments the
+// per-phase counter exactly once per Task lifetime (per operator process).
+func (r *TaskReconciler) recordTerminalMetrics(task *v1alpha1.Task) {
+	if !v1alpha1.IsTaskTerminal(task.Status.Phase) {
+		return
+	}
+	uid := string(task.UID)
+	if uid == "" {
+		return
+	}
+	if _, seen := r.metricsRecorded.LoadOrStore(uid, true); seen {
+		return
+	}
+	vmetrics.TasksTotal.WithLabelValues(task.Spec.AgentRef, task.Status.Phase).Inc()
+	if task.Status.StartTime != nil && task.Status.CompletionTime != nil {
+		d := task.Status.CompletionTime.Sub(task.Status.StartTime.Time).Seconds()
+		if d >= 0 {
+			vmetrics.TaskDurationSeconds.WithLabelValues(task.Spec.AgentRef, task.Status.Phase).Observe(d)
+		}
+	}
 }
 
 func (r *TaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -53,6 +83,7 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if v1alpha1.IsTaskTerminal(task.Status.Phase) {
+		r.recordTerminalMetrics(&task)
 		return ctrl.Result{}, nil
 	}
 	if task.Annotations[taskDispatchedAnnotation] == "true" {

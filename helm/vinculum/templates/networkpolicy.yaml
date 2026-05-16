@@ -1,0 +1,71 @@
+{{- if .Values.networkPolicy.enabled }}
+# Locks down egress for agent pods (vinculum.dev/agent label) to the bare
+# minimum needed for LLM APIs + git. Ingress is unrestricted within the
+# cluster — the operator + peer agents need to reach :8090 / :8084.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vinculum-agents
+  labels:
+    app.kubernetes.io/name: vinculum-agent
+    app.kubernetes.io/managed-by: vinculum-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vinculum-agent
+  policyTypes:
+    - Egress
+    - Ingress
+  ingress:
+    # Allow the operator + peer agents (in-namespace) to reach the agent's
+    # HTTP API on :8090.
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 8090
+          protocol: TCP
+  egress:
+    # DNS (TCP + UDP, 53).
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # In-namespace operator + peer agent pods (any port — covers
+    # vinculum-operator:8084 + agent-<name>:8090).
+    - to:
+        - podSelector: {}
+    # Public egress on 443 (LLM providers, GitHub API, git over HTTPS) and
+    # 22 (git over SSH).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - port: 443
+          protocol: TCP
+        - port: 22
+          protocol: TCP
+    {{- with .Values.networkPolicy.extraEgressCIDRs }}
+    # User-provided extra CIDRs (e.g. private git hosts).
+    - to:
+        {{- range . }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+    {{- end }}
+    {{- with .Values.networkPolicy.extraEgressNamespaces }}
+    - to:
+        {{- range . }}
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+        {{- end }}
+    {{- end }}
+{{- end }}

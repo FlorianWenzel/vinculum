@@ -138,7 +138,35 @@ func (e *Executor) persistArtifacts(ctx context.Context, state *tasks.State, wor
 		}
 		return []string{uri}, nil
 	case "pvc":
-		return nil, nil
+		// The agent pod can only mount what the operator declared at Pod
+		// creation time, and the workspace PVC is the one mount we know is
+		// always present. Treat `pvc` as "copy results to a subpath inside
+		// the workspace PVC so downstream consumers can mount it
+		// read-only and inspect outputs."
+		if sink.PVC == nil || sink.PVC.SubPath == "" {
+			return nil, errors.New("pvc artifacts require subPath (relative to /workspace)")
+		}
+		workspaceRoot := strings.TrimSpace(os.Getenv("WORKSPACE_ROOT"))
+		if workspaceRoot == "" {
+			workspaceRoot = "/workspace"
+		}
+		dest := filepath.Join(workspaceRoot, strings.TrimPrefix(sink.PVC.SubPath, "/"))
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return nil, fmt.Errorf("mkdir %s: %w", filepath.Dir(dest), err)
+		}
+		// Use `cp -a` to preserve mode + symlinks. The agent image has
+		// coreutils.
+		cmd := exec.CommandContext(ctx, "cp", "-a", source+"/.", dest)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("cp to %s: %s: %w", dest, strings.TrimSpace(string(out)), err)
+		}
+		claim := sink.PVC.ClaimName
+		if claim == "" {
+			// SubPath without claimName implicitly targets the agent's own
+			// workspace PVC. Reflect that in the returned URI.
+			claim = "agent-" + state.Payload.Spec.AgentRef + "-workspace"
+		}
+		return []string{"pvc://" + claim + "/" + strings.TrimPrefix(sink.PVC.SubPath, "/")}, nil
 	case "webhook":
 		if sink.Webhook == nil || sink.Webhook.URL == "" {
 			return nil, errors.New("webhook artifacts require url")
@@ -202,8 +230,12 @@ func (e *Executor) runCrush(ctx context.Context, state *tasks.State, workdir, pr
 	if e.cfg.CrushDebug {
 		args = append(args, "--debug")
 	}
-	if e.cfg.CrushModel != "" {
-		args = append(args, "--model", e.cfg.CrushModel)
+	model := strings.TrimSpace(state.Payload.Spec.Model)
+	if model == "" {
+		model = e.cfg.CrushModel
+	}
+	if model != "" {
+		args = append(args, "--model", model)
 	}
 	if withContinue {
 		args = append(args, "--continue")

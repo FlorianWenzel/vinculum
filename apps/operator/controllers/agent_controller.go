@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1alpha1 "github.com/florian/vinculum/apps/operator/api/v1alpha1"
+	vmetrics "github.com/florian/vinculum/apps/operator/internal/metrics"
 )
 
 const (
@@ -398,6 +399,21 @@ func renderCrushConfig(agent *v1alpha1.Agent, resolved []resolvedMCP) (string, e
 	if agent.Spec.Model != "" {
 		cfg["model"] = agent.Spec.Model
 	}
+	// Default: no permission prompts. Non-interactive `crush run` would
+	// otherwise hang waiting for human approval of each tool use. Users
+	// can lock this down via spec.allowedTools.
+	allowed := agent.Spec.AllowedTools
+	if len(allowed) == 0 {
+		allowed = []string{"*"}
+	}
+	cfg["permissions"] = map[string]any{"allowed_tools": allowed}
+	if len(agent.Spec.DisabledTools) > 0 {
+		tools := map[string]any{}
+		for _, name := range agent.Spec.DisabledTools {
+			tools[name] = map[string]any{"disabled": true}
+		}
+		cfg["tools"] = tools
+	}
 	if len(resolved) > 0 {
 		mcp := map[string]any{}
 		for _, server := range resolved {
@@ -544,18 +560,14 @@ else
 fi
 `
 
-	uid := agentUID
 	initContainers = append(initContainers, corev1.Container{
-		Name:         "git-clone",
-		Image:        gitImage,
-		Command:      []string{"sh", "-c", cloneScript},
-		Env:          initEnv,
-		EnvFrom:      tokenEnvFrom,
-		VolumeMounts: initMounts,
-		SecurityContext: &corev1.SecurityContext{
-			RunAsUser:  &uid,
-			RunAsGroup: &uid,
-		},
+		Name:            "git-clone",
+		Image:           gitImage,
+		Command:         []string{"sh", "-c", cloneScript},
+		Env:             initEnv,
+		EnvFrom:         tokenEnvFrom,
+		VolumeMounts:    initMounts,
+		SecurityContext: agentSecurityContext(),
 	})
 
 	// Main container additions.
@@ -679,6 +691,7 @@ func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.
 						Name:            "agent",
 						Image:           chooseAgentImage(agent.Spec.Image, r.Cfg.AgentDefaultImage),
 						ImagePullPolicy: corev1.PullIfNotPresent,
+						SecurityContext: agentSecurityContext(),
 						Args:            []string{"serve"},
 						Env:             envVars,
 						EnvFrom:         envFrom,
@@ -832,7 +845,36 @@ func (r *AgentReconciler) writeStatus(ctx context.Context, agent *v1alpha1.Agent
 			return ctrl.Result{}, err
 		}
 	}
+	readyVal := 0.0
+	if ready {
+		readyVal = 1.0
+	}
+	vmetrics.AgentReady.WithLabelValues(agent.Name).Set(readyVal)
 	return ctrl.Result{}, nil
+}
+
+// agentSecurityContext is the locked-down SecurityContext applied to both
+// the agent container and the git-clone init container. RunAsUser/Group
+// pin to the `agent` user baked into the agent image so cloned files end
+// up owned by 10001:10001 and aren't readable only by root.
+//
+// AllowPrivilegeEscalation=false + drop ALL caps + RuntimeDefault seccomp
+// are the standard hardening trio recommended by the Pod Security
+// Standards "restricted" profile. Root filesystem is left writable
+// (crush + apt-installed tools assume that); a future revision can flip
+// readOnlyRootFilesystem once the image is reworked for read-only roots.
+func agentSecurityContext() *corev1.SecurityContext {
+	nonRoot := true
+	noEscalate := false
+	uid := agentUID
+	return &corev1.SecurityContext{
+		RunAsNonRoot:             &nonRoot,
+		RunAsUser:                &uid,
+		RunAsGroup:               &uid,
+		AllowPrivilegeEscalation: &noEscalate,
+		Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+		SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+	}
 }
 
 func hashMap(m map[string]string) string {

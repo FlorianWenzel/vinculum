@@ -21,6 +21,7 @@ import (
 	v1alpha1 "github.com/florian/vinculum/apps/operator/api/v1alpha1"
 	"github.com/florian/vinculum/apps/operator/controllers"
 	appconfig "github.com/florian/vinculum/apps/operator/internal/config"
+	vmetrics "github.com/florian/vinculum/apps/operator/internal/metrics"
 )
 
 func main() {
@@ -33,6 +34,7 @@ func main() {
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8083", "The address the probe endpoint binds to.")
 	flag.Parse()
 	cfg := appconfig.Load()
+	vmetrics.Register()
 
 	scheme := clientgoscheme.Scheme
 	_ = corev1.AddToScheme(scheme)

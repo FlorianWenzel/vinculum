@@ -47,6 +47,14 @@ type AgentSpec struct {
 	// (VINCULUM_OPERATOR_URL) so the agent can dispatch Tasks to peer Agents via
 	// the vinculum MCP server.
 	Orchestrator bool `json:"orchestrator,omitempty"`
+	// AllowedTools lists crush tool names that don't require a permission
+	// prompt. Renders to crush's permissions.allowed_tools. Default when
+	// unset: ["*"] — non-interactive `crush run` would block otherwise.
+	AllowedTools []string `json:"allowedTools,omitempty"`
+	// DisabledTools lists crush tool names to forcibly disable on this
+	// Agent. Each entry becomes a `tools.<name> = {disabled: true}` block
+	// in crush.json. Useful to forbid `bash` on a read-only review agent.
+	DisabledTools []string `json:"disabledTools,omitempty"`
 	// Repo, when set, makes the operator add an init container to the agent
 	// Deployment that clones (or fetches) the repo into the workspace PVC
 	// before the agent's first Task. The clone is cached on the PVC so pod
@@ -182,6 +190,12 @@ func (in *AgentSpec) DeepCopyInto(out *AgentSpec) {
 	if in.WorkspaceStorageClass != nil {
 		v := *in.WorkspaceStorageClass
 		out.WorkspaceStorageClass = &v
+	}
+	if in.AllowedTools != nil {
+		out.AllowedTools = append([]string(nil), in.AllowedTools...)
+	}
+	if in.DisabledTools != nil {
+		out.DisabledTools = append([]string(nil), in.DisabledTools...)
 	}
 	if in.Repo != nil {
 		cp := *in.Repo

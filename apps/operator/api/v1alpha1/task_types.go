@@ -22,6 +22,10 @@ type TaskSpec struct {
 	Artifacts      *ArtifactSink     `json:"artifacts,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	TimeoutSeconds int32             `json:"timeoutSeconds,omitempty"`
+	// Model, when non-empty, overrides the parent Agent's spec.model just
+	// for this Task. Useful for routing a small Task to a cheap model and
+	// a bigger one to a smarter model without standing up two Agents.
+	Model string `json:"model,omitempty"`
 	// Git, when set, makes the agent run a coding workflow around crush:
 	// check out a branch off the base before running crush, then commit +
 	// push any changes after. Optionally open a PR via the GitHub API.

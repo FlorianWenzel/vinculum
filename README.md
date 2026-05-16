@@ -224,13 +224,22 @@ Defaults: `baseBranch` falls back to the Agent's `repo.branch`; `headBranch` def
 
 Full example: [`.local/agent-coder.yaml`](.local/agent-coder.yaml).
 
+### Tightening + observability (v0.4)
+
+- **Per-Task model override.** `Task.spec.model` overrides the Agent's model just for that Task. Useful for routing a small Task to a cheap model: `vnclm run "..." --model openrouter/anthropic/claude-haiku-4.5`.
+- **Tools / permissions.** `Agent.spec.allowedTools` / `Agent.spec.disabledTools` are rendered into `crush.json`. Default `allowed_tools: ["*"]` so non-interactive `crush run` doesn't block. Lock down a review agent with e.g. `disabledTools: ["bash"]`.
+- **Metrics.** The operator publishes `vinculum_tasks_total{agent,phase}`, `vinculum_task_duration_seconds{agent,phase}`, `vinculum_agent_ready{agent}`, and `vinculum_orchestrator_dispatches_total{from,to}` on the existing `:8082/metrics` endpoint.
+- **NetworkPolicy.** Off by default. `helm install ... --set networkPolicy.enabled=true` adds an opt-in NetworkPolicy that lets agent pods reach DNS, the operator service, and public 443/22 — and blocks everything else. Extend via `networkPolicy.extraEgressCIDRs` / `extraEgressNamespaces`.
+- **Hardened pod SecurityContext.** Agent + init containers now run as `agentUID=10001`, non-root, `AllowPrivilegeEscalation=false`, drop `ALL` caps, `seccompProfile=RuntimeDefault`.
+- **PVC artifact sink.** `Task.spec.artifacts.pvc.subPath` copies results into a subpath of the workspace PVC; downstream consumers mount the PVC read-only to inspect.
+
 ## Quick start
 
 ### 1. Install the chart
 
 ```bash
 helm install vinculum oci://ghcr.io/florianwenzel/helm/vinculum \
-  --version 0.3.0 \
+  --version 0.4.0 \
   -n vinculum-system --create-namespace
 ```
 
@@ -248,7 +257,7 @@ brew install FlorianWenzel/vinculum/vnclm
 **Prebuilt binary** (macOS / Linux / Windows — amd64 / arm64):
 
 ```bash
-VERSION=v0.3.0
+VERSION=v0.4.0
 OS=darwin      # linux | darwin | windows
 ARCH=arm64     # amd64 | arm64
 curl -L -o vnclm \

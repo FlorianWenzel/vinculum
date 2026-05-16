@@ -42,6 +42,7 @@ spec:
                 prompt: {type: string}
                 fresh: {type: boolean}
                 timeoutSeconds: {type: integer}
+                model: {type: string}
                 env:
                   type: object
                   additionalProperties: {type: string}

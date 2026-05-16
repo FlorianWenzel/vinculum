@@ -14,7 +14,13 @@ import (
 
 	v1alpha1 "github.com/florian/vinculum/apps/operator/api/v1alpha1"
 	appconfig "github.com/florian/vinculum/apps/operator/internal/config"
+	vmetrics "github.com/florian/vinculum/apps/operator/internal/metrics"
 )
+
+// fromAgentHeader is the HTTP header in-cluster orchestrator agents add to
+// POST /api/tasks so the operator can count dispatches without parsing the
+// pod's identity off the ServiceAccount token.
+const fromAgentHeader = "X-Vinculum-From-Agent"
 
 func newAPIMux(k8s client.Client, namespace string, cfg appconfig.Config) *http.ServeMux {
 	mux := http.NewServeMux()
@@ -65,6 +71,8 @@ func newAPIMux(k8s client.Client, namespace string, cfg appconfig.Config) *http.
 				Orchestrator      bool                       `json:"orchestrator"`
 				Repo              *v1alpha1.AgentRepo        `json:"repo"`
 				GitCredentials    *v1alpha1.GitCredentials   `json:"gitCredentials"`
+				AllowedTools      []string                   `json:"allowedTools"`
+				DisabledTools     []string                   `json:"disabledTools"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
 				jsonError(w, http.StatusBadRequest, err.Error())
@@ -101,6 +109,8 @@ func newAPIMux(k8s client.Client, namespace string, cfg appconfig.Config) *http.
 					Orchestrator:         spec.Orchestrator,
 					Repo:                 spec.Repo,
 					GitCredentials:       spec.GitCredentials,
+					AllowedTools:         spec.AllowedTools,
+					DisabledTools:        spec.DisabledTools,
 				},
 			}
 			if err := k8s.Create(ctx, obj); err != nil {
@@ -177,6 +187,9 @@ func newAPIMux(k8s client.Client, namespace string, cfg appconfig.Config) *http.
 			if err := k8s.Create(ctx, obj); err != nil {
 				jsonError(w, http.StatusConflict, err.Error())
 				return
+			}
+			if from := strings.TrimSpace(r.Header.Get(fromAgentHeader)); from != "" {
+				vmetrics.OrchestratorDispatchesTotal.WithLabelValues(from, body.Spec.AgentRef).Inc()
 			}
 			jsonOK(w, obj)
 		default:

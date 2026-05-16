@@ -32,6 +32,7 @@ func runCmd() *cobra.Command {
 		fresh       bool
 		wsMode      = "shared"
 		timeout     int32 = 300
+		model       string
 		baseBranch  string
 		headBranch  string
 		commitMsg   string
@@ -64,6 +65,9 @@ func runCmd() *cobra.Command {
 				"fresh":          fresh,
 				"workspace":      map[string]any{"mode": wsMode},
 				"timeoutSeconds": timeout,
+			}
+			if model != "" {
+				spec["model"] = model
 			}
 			if hasGitFlags := baseBranch != "" || headBranch != "" || commitMsg != "" || prTitle != "" || prBody != "" || skipPR; hasGitFlags {
 				g := map[string]any{}
@@ -144,6 +148,7 @@ func runCmd() *cobra.Command {
 	c.Flags().BoolVar(&fresh, "fresh", false, "no --continue")
 	c.Flags().StringVar(&wsMode, "workspace", "shared", "shared|ephemeral")
 	c.Flags().Int32Var(&timeout, "timeout", 300, "task timeout seconds")
+	c.Flags().StringVar(&model, "model", "", "override Agent's model for this Task only")
 	c.Flags().StringVar(&baseBranch, "base-branch", "", "git base branch (requires Agent.spec.repo)")
 	c.Flags().StringVar(&headBranch, "head-branch", "", `git head branch (default "vinculum/task-<name>")`)
 	c.Flags().StringVar(&commitMsg, "commit", "", `commit message (default "vinculum: <task>")`)

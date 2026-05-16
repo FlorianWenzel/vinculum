@@ -32,7 +32,7 @@ func main() {
 	selfName := os.Getenv("AGENT_NAME")
 	namespace := os.Getenv("AGENT_NAMESPACE")
 
-	op := opclient.New(operatorURL)
+	op := opclient.New(operatorURL).WithFromAgent(selfName)
 	srv := buildServer(op, selfName, namespace, &http.Client{Timeout: 30 * time.Second})
 
 	ctx, cancel := context.WithCancel(context.Background())

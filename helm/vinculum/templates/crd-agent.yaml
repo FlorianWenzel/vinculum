@@ -81,6 +81,12 @@ spec:
                 workspaceSize: {type: string}
                 workspaceStorageClass: {type: string}
                 orchestrator: {type: boolean}
+                allowedTools:
+                  type: array
+                  items: {type: string}
+                disabledTools:
+                  type: array
+                  items: {type: string}
                 repo:
                   type: object
                   required: [url]
