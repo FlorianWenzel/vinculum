@@ -32,7 +32,7 @@
 
 <section class="hero">
   <div class="wrap">
-    <div class="status">HIVE_STATUS: ONLINE · v0.4.2</div>
+    <div class="status">HIVE_STATUS: ONLINE · v0.5.0</div>
     <h1>The collective<br>for AI coding agents.</h1>
     <p class="tagline">Long-lived <em>crush</em> agents running as Kubernetes Deployments. One operator. Many drones. One shared link - the vinculum.</p>
     <div class="cta">
@@ -131,7 +131,7 @@
           <h3>Install the chart</h3>
           <p>Helm OCI install - no repo add, no values overrides required for a default run.</p>
 <pre><span class="cmd">helm</span> install vinculum <span class="flag">oci://</span>ghcr.io/florianwenzel/helm/vinculum \
-  <span class="flag">--version</span> 0.4.2 \
+  <span class="flag">--version</span> 0.5.0 \
   <span class="flag">-n</span> vinculum-system <span class="flag">--create-namespace</span></pre>
         </div>
       </div>
@@ -298,6 +298,42 @@
     </div>
 
     <p class="aside"><span class="aside-tag">Trust boundary</span> The operator's in-cluster API has no auth — the namespace is the trust boundary. The <code>orchestrator</code> flag gates env injection, not network reachability. Isolate orchestrators in their own namespace when stricter separation matters.</p>
+  </div>
+</section>
+
+<section id="triggers">
+  <div class="wrap">
+    <div class="eyebrow">Subspace beacon</div>
+    <h2>Drones that wake on signal.</h2>
+    <p class="lede">A <code>WebhookTrigger</code> turns inbound GitHub webhooks into Tasks. The operator verifies the HMAC signature against a per-trigger Secret, matches the event against your filter, substitutes <code>${event.*}</code> placeholders into the task template, and stamps the Task. Open a PR — your review agent commits its read.</p>
+
+    <div class="codeblock">
+      <div class="head">
+        <span>Autonomous PR review on every push</span>
+        <span class="lang">yaml</span>
+      </div>
+<pre><span class="key">apiVersion:</span> vinculum.dev/v1alpha1
+<span class="key">kind:</span> WebhookTrigger
+<span class="key">metadata:</span>
+  <span class="key">name:</span> acme-pr-review
+<span class="key">spec:</span>
+  <span class="key">source:</span> github
+  <span class="key">events:</span> [pull_request.opened, pull_request.synchronize]
+  <span class="key">filter:</span>
+    <span class="key">repo:</span> acme/api
+    <span class="key">branch:</span> main
+  <span class="key">secretRef:</span> { <span class="key">name:</span> acme-gh-webhook }   <span class="cmt"># key "secret" = HMAC shared secret</span>
+  <span class="key">agentRef:</span> coder
+  <span class="key">taskTemplate:</span>
+    <span class="key">prompt:</span> <span class="str">"Review PR #${event.pr.number} (${event.pr.title})."</span>
+    <span class="key">fresh:</span> <span class="num">true</span>
+    <span class="key">git:</span>
+      <span class="key">baseBranch:</span> ${event.pr.head}
+      <span class="key">headBranch:</span> review/pr-${event.pr.number}
+      <span class="key">prTitle:</span> <span class="str">"review: PR #${event.pr.number}"</span></pre>
+    </div>
+
+    <p class="aside"><span class="aside-tag">Exposure</span> The operator's <code>/webhook/github</code> is on the same in-cluster Service as the rest of the API. Wire your own Ingress / tunnel / LB — vinculum doesn't bake one in so you stay in control of TLS, hostnames, and any extra auth.</p>
   </div>
 </section>
 

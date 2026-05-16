@@ -53,14 +53,14 @@ File: `.github/workflows/publish-cli.yaml`
 The chart leaves first-party image tags empty in `helm/vinculum/values.yaml`. Templates fall back to `.Chart.AppVersion`.
 
 Operational meaning:
-- Installing chart version `0.4.2` uses app images tagged `0.4.2` by default.
+- Installing chart version `0.5.0` uses app images tagged `0.5.0` by default.
 - Chart `version` controls the package version.
 - Chart `appVersion` controls the default first-party image tag.
 
 ## Published endpoints
 
 ```bash
-helm install vinculum oci://ghcr.io/florianwenzel/helm/vinculum --version 0.4.2 -n vinculum-system --create-namespace
+helm install vinculum oci://ghcr.io/florianwenzel/helm/vinculum --version 0.5.0 -n vinculum-system --create-namespace
 ```
 
 GHCR namespace:

@@ -22,6 +22,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&AgentScheduleList{},
 		&MCPServer{},
 		&MCPServerList{},
+		&WebhookTrigger{},
+		&WebhookTriggerList{},
 	)
 	metav1.AddToGroupVersion(scheme, GroupVersion)
 	return nil

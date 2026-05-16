@@ -33,6 +33,7 @@ One operator. Many agents. One shared link — the vinculum.
 - **Multi-provider.** Azure OpenAI, Anthropic, OpenAI, OpenRouter, or bring-your-own — a provider is just a labeled Secret.
 - **Hive mind.** Set `orchestrator: true` on an Agent and it can dispatch Tasks to its peers via the bundled `vnclm-mcp` stdio bridge. Master agents talk to the operator API in-cluster; no extra plumbing.
 - **Ships code.** Declare a repo + git credentials on the Agent, set `spec.git` on a Task, and the agent clones, branches, commits, pushes, and opens a GitHub PR — declaratively.
+- **Event-driven.** `WebhookTrigger` CRs turn GitHub webhook deliveries (push, PR opened/synced, …) into Tasks, with HMAC-signed verification per trigger.
 - **One binary CLI.** `vnclm` port-forwards through your active kubecontext — no exposed operator endpoint, no long-lived local state.
 
 ## Architecture
@@ -71,6 +72,7 @@ flowchart LR
 - **`Task`** — unit of work for an Agent. Fields: `prompt`, `fresh`, `workspace.mode` (`shared` | `ephemeral`), `timeoutSeconds`, `artifacts`, `env`, `git`. Tasks run serially inside the Agent pod; shared workspace by default so edits accumulate. With `spec.git` set, the agent wraps crush in a branch/commit/push/PR workflow.
 - **`AgentSchedule`** — cron trigger that stamps `Task`s from a template. Concurrency: `Allow` | `Forbid` | `Replace`.
 - **`MCPServer`** — reusable MCP (Model Context Protocol) server definition. Attach to any Agent via `spec.mcpServerRefs: [name, ...]`. Rendered into the agent's `crush.json`; `secretRef` is mounted as `envFrom` on the agent pod so stdio processes inherit credentials.
+- **`WebhookTrigger`** — turns inbound webhook deliveries (GitHub today) into Tasks. Filters by event type, repo, branch; verifies HMAC against a per-trigger Secret; substitutes `${event.repo}`, `${event.sha}`, `${event.pr.*}` into the task template.
 
 ## MCP servers
 
@@ -224,6 +226,44 @@ Defaults: `baseBranch` falls back to the Agent's `repo.branch`; `headBranch` def
 
 Full example: [`.local/agent-coder.yaml`](.local/agent-coder.yaml).
 
+### Webhook triggers (v0.5)
+
+`WebhookTrigger` turns inbound webhooks into Tasks. GitHub is the only supported source today; the verification is HMAC-SHA256 against the per-trigger Secret.
+
+```yaml
+apiVersion: vinculum.dev/v1alpha1
+kind: WebhookTrigger
+metadata: { name: acme-pr-review, namespace: vinculum-system }
+spec:
+  source: github
+  events: [pull_request.opened, pull_request.synchronize]
+  filter:
+    repo: acme/api
+    branch: main
+  secretRef: { name: acme-gh-webhook }    # key "secret" = HMAC shared secret
+  agentRef: coder
+  taskTemplate:
+    prompt: |
+      Review PR #${event.pr.number} (${event.pr.title}) at ${event.pr.head}.
+    fresh: true
+    git:
+      baseBranch: ${event.pr.head}
+      headBranch: review/pr-${event.pr.number}
+      prTitle: "review: PR #${event.pr.number}"
+```
+
+The operator handles `POST /webhook/github` on the same `:8084` port the CLI uses. It's a ClusterIP service by default — wire your own Ingress/LB/tunnel that forwards `/webhook/github` to it. The chart deliberately doesn't bake an Ingress so you control TLS + hostnames.
+
+| Template var | Available on |
+|---|---|
+| `${event.repo}` | all events |
+| `${event.ref}` / `${event.sha}` | push |
+| `${event.pr.number}` / `${event.pr.title}` / `${event.pr.head}` / `${event.pr.base}` | pull_request |
+
+Substitution applies to `prompt`, `baseBranch`, `headBranch`, `commitMessage`, `prTitle`, `prBody`. Unknown vars are left intact so misspellings surface in `Task.status`. Each delivery's `X-GitHub-Delivery` ID is folded into the resulting Task name, so a retried delivery is idempotent (AlreadyExists is silently absorbed).
+
+Full example: [`.local/webhook-trigger.yaml`](.local/webhook-trigger.yaml).
+
 ### Tightening + observability (v0.4)
 
 - **Per-Task model override.** `Task.spec.model` overrides the Agent's model just for that Task. Useful for routing a small Task to a cheap model: `vnclm run "..." --model openrouter/anthropic/claude-haiku-4.5`.
@@ -239,7 +279,7 @@ Full example: [`.local/agent-coder.yaml`](.local/agent-coder.yaml).
 
 ```bash
 helm install vinculum oci://ghcr.io/florianwenzel/helm/vinculum \
-  --version 0.4.2 \
+  --version 0.5.0 \
   -n vinculum-system --create-namespace
 ```
 
@@ -257,7 +297,7 @@ brew install FlorianWenzel/vinculum/vnclm
 **Prebuilt binary** (macOS / Linux / Windows — amd64 / arm64):
 
 ```bash
-VERSION=v0.4.2
+VERSION=v0.5.0
 OS=darwin      # linux | darwin | windows
 ARCH=arm64     # amd64 | arm64
 curl -L -o vnclm \
@@ -306,7 +346,7 @@ Logs stream live from the crush session; the CLI blocks until terminal phase (`S
 vnclm ctx show | set-agent <name> | clear-agent
 vnclm get agents|tasks|schedules|providers|mcps [name]  [-o table|wide|json|yaml]
 vnclm delete <kind> <name>                              [--yes]
-vnclm create provider|agent|task|schedule|mcp     # interactive wizard
+vnclm create provider|agent|task|schedule|mcp|webhook   # interactive wizard / flags
 vnclm create -f manifest.yaml                     # apply file (multi-doc OK)
 vnclm logs <task>                                 [-f]              # stream crush output
 vnclm run "<prompt>"  [--agent] [--fresh] [--workspace shared|ephemeral] [--timeout N]

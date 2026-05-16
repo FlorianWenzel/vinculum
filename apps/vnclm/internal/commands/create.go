@@ -47,6 +47,7 @@ func createCmd() *cobra.Command {
 		createScheduleCmd(&fromFile),
 		createProviderCmd(),
 		createMCPCmd(),
+		createWebhookCmd(&fromFile),
 	)
 	return c
 }
@@ -490,4 +491,99 @@ func runScheduleWizard(ctx context.Context, kc *kube.Client, name, agent, cron, 
 		),
 	).WithTheme(theme.Huh())
 	return form.Run()
+}
+
+func createWebhookCmd(fromFile *string) *cobra.Command {
+	var (
+		name       string
+		agent      string
+		secretRef  string
+		events     []string
+		repoFilter string
+		branchFilt string
+		prompt     string
+		baseBranch string
+		headBranch string
+		commitMsg  string
+		prTitle    string
+		prBody     string
+		skipPR     bool
+		suspend    bool
+	)
+	c := &cobra.Command{
+		Use:   "webhook",
+		Short: "Create a WebhookTrigger (GitHub-only in v1)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+			kc, err := loadKube()
+			if err != nil {
+				return err
+			}
+			if *fromFile != "" {
+				_, err := applyYAMLFile(ctx, kc, *fromFile)
+				return err
+			}
+			if name == "" || agent == "" || secretRef == "" || len(events) == 0 || prompt == "" {
+				return errf("name, agent, secret-ref, events, and prompt are required (see --help)")
+			}
+			tpl := map[string]any{"prompt": prompt}
+			if hasGit := baseBranch != "" || headBranch != "" || commitMsg != "" || prTitle != "" || prBody != "" || skipPR; hasGit {
+				git := map[string]any{}
+				if baseBranch != "" {
+					git["baseBranch"] = baseBranch
+				}
+				if headBranch != "" {
+					git["headBranch"] = headBranch
+				}
+				if commitMsg != "" {
+					git["commitMessage"] = commitMsg
+				}
+				if prTitle != "" {
+					git["prTitle"] = prTitle
+				}
+				if prBody != "" {
+					git["prBody"] = prBody
+				}
+				if skipPR {
+					git["skipPR"] = true
+				}
+				tpl["git"] = git
+			}
+			body := map[string]any{
+				"name": name,
+				"spec": map[string]any{
+					"source":       "github",
+					"events":       events,
+					"agentRef":     agent,
+					"secretRef":    map[string]any{"name": secretRef},
+					"filter":       map[string]any{"repo": repoFilter, "branch": branchFilt},
+					"suspend":      suspend,
+					"taskTemplate": tpl,
+				},
+			}
+			return withOperator(ctx, kc, func(h *client.HTTP) error {
+				if err := h.PostJSON(ctx, "/api/webhooktriggers", body, nil); err != nil {
+					return err
+				}
+				fmt.Printf("webhooktrigger %q created (agent=%s)\n", name, agent)
+				return nil
+			})
+		},
+	}
+	c.Flags().StringVar(&name, "name", "", "trigger name")
+	c.Flags().StringVar(&agent, "agent", "", "Agent that stamped Tasks target")
+	c.Flags().StringVar(&secretRef, "secret-ref", "", "Secret with key 'secret' (HMAC shared secret)")
+	c.Flags().StringSliceVar(&events, "events", nil, "github event types: push,pull_request,pull_request.opened,…")
+	c.Flags().StringVar(&repoFilter, "repo", "", "filter to owner/repo (optional)")
+	c.Flags().StringVar(&branchFilt, "branch", "", "filter to branch (optional)")
+	c.Flags().StringVar(&prompt, "prompt", "", "Task prompt template; ${event.repo} ${event.sha} ${event.ref} ${event.pr.*} substituted")
+	c.Flags().StringVar(&baseBranch, "base-branch", "", "git baseBranch template")
+	c.Flags().StringVar(&headBranch, "head-branch", "", "git headBranch template")
+	c.Flags().StringVar(&commitMsg, "commit", "", "commit message template")
+	c.Flags().StringVar(&prTitle, "pr-title", "", "PR title template")
+	c.Flags().StringVar(&prBody, "pr-body", "", "PR body template")
+	c.Flags().BoolVar(&skipPR, "skip-pr", false, "commit + push only, no PR")
+	c.Flags().BoolVar(&suspend, "suspend", false, "start trigger suspended")
+	_ = c.RegisterFlagCompletionFunc("agent", completeResource(gvrAgents))
+	return c
 }

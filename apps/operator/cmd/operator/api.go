@@ -15,6 +15,7 @@ import (
 	v1alpha1 "github.com/florian/vinculum/apps/operator/api/v1alpha1"
 	appconfig "github.com/florian/vinculum/apps/operator/internal/config"
 	vmetrics "github.com/florian/vinculum/apps/operator/internal/metrics"
+	"github.com/florian/vinculum/apps/operator/internal/webhooks"
 )
 
 // fromAgentHeader is the HTTP header in-cluster orchestrator agents add to
@@ -24,6 +25,8 @@ const fromAgentHeader = "X-Vinculum-From-Agent"
 
 func newAPIMux(k8s client.Client, namespace string, cfg appconfig.Config) *http.ServeMux {
 	mux := http.NewServeMux()
+
+	webhooks.New(k8s, namespace).MountOn(mux)
 
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		jsonOK(w, map[string]string{"status": "ok"})
@@ -286,6 +289,72 @@ func newAPIMux(k8s client.Client, namespace string, cfg appconfig.Config) *http.
 			jsonOK(w, obj)
 		case http.MethodDelete:
 			obj := &v1alpha1.AgentSchedule{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
+			if err := k8s.Delete(ctx, obj); err != nil {
+				jsonError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/api/webhooktriggers", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		switch r.Method {
+		case http.MethodGet:
+			var list v1alpha1.WebhookTriggerList
+			if err := k8s.List(ctx, &list, scopedList(namespace)...); err != nil {
+				jsonError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			jsonOK(w, list.Items)
+		case http.MethodPost:
+			body := struct {
+				Name string                     `json:"name"`
+				Spec v1alpha1.WebhookTriggerSpec `json:"spec"`
+			}{}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				jsonError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			if body.Name == "" || body.Spec.AgentRef == "" || body.Spec.SecretRef.Name == "" || len(body.Spec.Events) == 0 {
+				jsonError(w, http.StatusBadRequest, "name, spec.agentRef, spec.secretRef.name, spec.events are required")
+				return
+			}
+			ns := defaultNamespace(namespace)
+			obj := &v1alpha1.WebhookTrigger{
+				TypeMeta:   metav1.TypeMeta{APIVersion: v1alpha1.GroupVersion.String(), Kind: "WebhookTrigger"},
+				ObjectMeta: metav1.ObjectMeta{Name: body.Name, Namespace: ns},
+				Spec:       body.Spec,
+			}
+			if err := k8s.Create(ctx, obj); err != nil {
+				jsonError(w, http.StatusConflict, err.Error())
+				return
+			}
+			jsonOK(w, obj)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/webhooktriggers/", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		name := strings.TrimPrefix(r.URL.Path, "/api/webhooktriggers/")
+		if name == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		ns := defaultNamespace(namespace)
+		switch r.Method {
+		case http.MethodGet:
+			var obj v1alpha1.WebhookTrigger
+			if err := k8s.Get(ctx, client.ObjectKey{Name: name, Namespace: ns}, &obj); err != nil {
+				jsonError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			jsonOK(w, obj)
+		case http.MethodDelete:
+			obj := &v1alpha1.WebhookTrigger{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
 			if err := k8s.Delete(ctx, obj); err != nil {
 				jsonError(w, http.StatusNotFound, err.Error())
 				return

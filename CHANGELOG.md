@@ -9,6 +9,33 @@ Release artifacts and one-line summaries also live on the
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-05-16
+
+### Added
+- **`WebhookTrigger` CRD.** Inbound GitHub webhook deliveries (push,
+  pull_request, etc.) can now stamp Tasks declaratively. Per-trigger
+  HMAC-SHA256 verification against a referenced Secret; repo/branch
+  filtering; `${event.repo}` / `${event.sha}` / `${event.pr.*}`
+  template-var substitution in `prompt`, `headBranch`, `prTitle`,
+  `prBody`, `commitMessage`.
+- **Operator `POST /webhook/github` endpoint** on the existing `:8084`
+  service. ClusterIP — wire your own Ingress/LB/tunnel for public
+  exposure. The handler is stdlib-only; one delivery can fan out to
+  multiple matching triggers.
+- **`TaskTemplate` gains `model` + `git`** so AgentSchedule / WebhookTrigger
+  templates can drive the same coding workflow Tasks can today.
+- **`vnclm create webhook`** CLI subcommand with flags for events,
+  filter, secret-ref, and the git workflow fields.
+- 9 unit tests for the webhook handler: signature verify, event/filter
+  matching, full happy-path with task creation + status update, bad
+  signature rejection, no-match no-op, suspended trigger, template
+  substitution.
+
+### Changed
+- Operator RBAC widened to manage `webhooktriggers` and `webhooktriggers/status`.
+
+[Release notes](https://github.com/FlorianWenzel/vinculum/releases/tag/v0.5.0)
+
 ## [0.4.2] — 2026-05-16
 
 ### Fixed

@@ -66,6 +66,8 @@ type TaskTemplate struct {
 	Artifacts      *ArtifactSink     `json:"artifacts,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	TimeoutSeconds int32             `json:"timeoutSeconds,omitempty"`
+	Model          string            `json:"model,omitempty"`
+	Git            *TaskGit          `json:"git,omitempty"`
 }
 
 type TaskStatus struct {
@@ -164,6 +166,10 @@ func (in *TaskTemplate) DeepCopyInto(out *TaskTemplate) {
 			out.Env[k] = v
 		}
 	}
+	if in.Git != nil {
+		cp := *in.Git
+		out.Git = &cp
+	}
 }
 
 // ToSpec builds a TaskSpec from a TaskTemplate with the given agentRef.
@@ -173,6 +179,11 @@ func (in *TaskTemplate) ToSpec(agentRef string) TaskSpec {
 		Prompt:         in.Prompt,
 		Fresh:          in.Fresh,
 		TimeoutSeconds: in.TimeoutSeconds,
+		Model:          in.Model,
+	}
+	if in.Git != nil {
+		cp := *in.Git
+		spec.Git = &cp
 	}
 	if in.Workspace != nil {
 		cp := *in.Workspace

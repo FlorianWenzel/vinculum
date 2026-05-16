@@ -1,0 +1,98 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: webhooktriggers.vinculum.dev
+spec:
+  group: vinculum.dev
+  scope: Namespaced
+  names:
+    plural: webhooktriggers
+    singular: webhooktrigger
+    kind: WebhookTrigger
+    shortNames: [whtr]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Source
+          type: string
+          jsonPath: .spec.source
+        - name: Agent
+          type: string
+          jsonPath: .spec.agentRef
+        - name: Repo
+          type: string
+          jsonPath: .spec.filter.repo
+        - name: Fired
+          type: integer
+          jsonPath: .status.fireCount
+        - name: LastFired
+          type: date
+          jsonPath: .status.lastFired
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [source, events, agentRef, secretRef, taskTemplate]
+              properties:
+                source: {type: string, enum: [github]}
+                events:
+                  type: array
+                  items: {type: string}
+                filter:
+                  type: object
+                  properties:
+                    repo: {type: string}
+                    branch: {type: string}
+                secretRef:
+                  type: object
+                  required: [name]
+                  properties:
+                    name: {type: string}
+                agentRef: {type: string}
+                suspend: {type: boolean}
+                taskTemplate:
+                  type: object
+                  required: [prompt]
+                  properties:
+                    prompt: {type: string}
+                    fresh: {type: boolean}
+                    timeoutSeconds: {type: integer}
+                    env:
+                      type: object
+                      additionalProperties: {type: string}
+                    workspace:
+                      type: object
+                      properties:
+                        mode: {type: string, enum: [shared, ephemeral]}
+                    git:
+                      type: object
+                      properties:
+                        baseBranch: {type: string}
+                        headBranch: {type: string}
+                        commitMessage: {type: string}
+                        prTitle: {type: string}
+                        prBody: {type: string}
+                        skipPR: {type: boolean}
+            status:
+              type: object
+              properties:
+                lastFired:
+                  type: string
+                  format: date-time
+                fireCount: {type: integer}
+                lastReason: {type: string}
+                lastMessage: {type: string}
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+      subresources:
+        status: {}
