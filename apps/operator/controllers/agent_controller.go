@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -29,6 +30,18 @@ const (
 	defaultWorkspaceSize = "10Gi"
 	agentPort            = 8090
 	configHashAnnotation = "vinculum.dev/config-hash"
+	defaultRepoPath      = "repo"
+	gitImage             = "alpine/git:v2.47.2"
+	gitSSHMountPath      = "/etc/vinculum/git-ssh"
+	// agentUID matches the `agent` user baked into the vinculum-agent image
+	// (apps/vinculum-agent/Dockerfile). The git-clone init container runs
+	// under the same UID so cloned files are readable/writable by the main
+	// container without invoking `safe.directory` workarounds.
+	agentUID = int64(10001)
+	// gitCredentialHelper drives `git` over HTTPS using the GIT_TOKEN env var.
+	// Username "x-access-token" is the canonical GitHub form and is also
+	// accepted by GitLab when paired with a personal access token.
+	gitCredentialHelper = `!f() { test "$1" = get && echo username=x-access-token && echo password=$GIT_TOKEN; }; f`
 )
 
 type AgentReconciler struct {
@@ -418,6 +431,160 @@ func renderCrushConfig(agent *v1alpha1.Agent, resolved []resolvedMCP) (string, e
 	return string(blob), nil
 }
 
+// gitPodPieces returns the Deployment additions needed to clone a repo and
+// authenticate to it. When agent.Spec.Repo is nil, every returned slice is
+// empty and the caller leaves the Deployment unchanged.
+//
+// The init container clones (or fetches) into /workspace/<path>. Credential
+// material is mounted into both the init container and the main container so
+// the agent can `git push` after Tasks complete.
+func gitPodPieces(agent *v1alpha1.Agent) (initContainers []corev1.Container, extraVolumes []corev1.Volume, extraMainMounts []corev1.VolumeMount, extraMainEnv []corev1.EnvVar, extraMainEnvFrom []corev1.EnvFromSource) {
+	if agent.Spec.Repo == nil || strings.TrimSpace(agent.Spec.Repo.URL) == "" {
+		return
+	}
+	repoPath := strings.TrimSpace(agent.Spec.Repo.Path)
+	if repoPath == "" {
+		repoPath = defaultRepoPath
+	}
+	absRepoPath := "/workspace/" + repoPath
+	branch := strings.TrimSpace(agent.Spec.Repo.Branch)
+
+	creds := agent.Spec.GitCredentials
+
+	// SSH-key volume mounted into both containers when set.
+	var sshMount *corev1.VolumeMount
+	if creds != nil && creds.SSHKeySecretRef != nil && creds.SSHKeySecretRef.Name != "" {
+		mode := int32(0o400)
+		extraVolumes = append(extraVolumes, corev1.Volume{
+			Name: "git-ssh",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  creds.SSHKeySecretRef.Name,
+					DefaultMode: &mode,
+				},
+			},
+		})
+		m := corev1.VolumeMount{Name: "git-ssh", MountPath: gitSSHMountPath, ReadOnly: true}
+		sshMount = &m
+		extraMainMounts = append(extraMainMounts, m)
+	}
+
+	// Env shared by init + main containers.
+	sshCommand := ""
+	if sshMount != nil {
+		// id_ed25519 is the canonical private-key filename we expect inside
+		// the Secret. accept-new lets first-contact connections proceed but
+		// pins the host key for future connections.
+		sshCommand = "ssh -i " + gitSSHMountPath + "/id_ed25519 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=" + gitSSHMountPath + "/known_hosts"
+	}
+
+	tokenEnv := []corev1.EnvVar{}
+	tokenEnvFrom := []corev1.EnvFromSource{}
+	if creds != nil && creds.TokenSecretRef != nil && creds.TokenSecretRef.Name != "" {
+		optional := true
+		tokenEnv = append(tokenEnv,
+			corev1.EnvVar{Name: "GIT_TOKEN", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: creds.TokenSecretRef.Name},
+				Key:                  "token", Optional: &optional,
+			}}},
+			corev1.EnvVar{Name: "GIT_CONFIG_COUNT", Value: "1"},
+			corev1.EnvVar{Name: "GIT_CONFIG_KEY_0", Value: "credential.helper"},
+			corev1.EnvVar{Name: "GIT_CONFIG_VALUE_0", Value: gitCredentialHelper},
+		)
+		// Also envFrom so additional keys (e.g. GITHUB_TOKEN for PR API
+		// creation in chunk B) flow through as env vars.
+		tokenEnvFrom = append(tokenEnvFrom, corev1.EnvFromSource{
+			SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{Name: creds.TokenSecretRef.Name},
+			},
+		})
+	}
+
+	initEnv := []corev1.EnvVar{
+		{Name: "REPO_URL", Value: agent.Spec.Repo.URL},
+		{Name: "REPO_PATH", Value: absRepoPath},
+		{Name: "REPO_BRANCH", Value: branch},
+		// HOME must be writable so `git config --global` can persist
+		// safe.directory entries. /tmp is /tmp on the workspace pod (the
+		// init container shares /tmp by virtue of nothing else mounting
+		// over it — alpine has /tmp by default).
+		{Name: "HOME", Value: "/tmp"},
+	}
+	if sshCommand != "" {
+		initEnv = append(initEnv, corev1.EnvVar{Name: "GIT_SSH_COMMAND", Value: sshCommand})
+	}
+	initEnv = append(initEnv, tokenEnv...)
+
+	initMounts := []corev1.VolumeMount{{Name: "workspace", MountPath: "/workspace"}}
+	if sshMount != nil {
+		initMounts = append(initMounts, *sshMount)
+	}
+
+	// safe.directory wildcard avoids "dubious ownership" failures when the
+	// PVC's repo dir was created by an older container that ran as a
+	// different UID (e.g. a v0.2.0 clone left over after upgrade).
+	cloneScript := `set -eu
+git config --global --add safe.directory '*'
+mkdir -p "$(dirname "$REPO_PATH")"
+if [ -d "$REPO_PATH/.git" ]; then
+  echo "vinculum: repo cache present at $REPO_PATH, fetching"
+  cd "$REPO_PATH"
+  git remote set-url origin "$REPO_URL"
+  git fetch --all --prune
+  if [ -n "$REPO_BRANCH" ]; then
+    git checkout -B "$REPO_BRANCH" "origin/$REPO_BRANCH"
+  fi
+else
+  echo "vinculum: cloning $REPO_URL into $REPO_PATH"
+  if [ -n "$REPO_BRANCH" ]; then
+    git clone --branch "$REPO_BRANCH" "$REPO_URL" "$REPO_PATH"
+  else
+    git clone "$REPO_URL" "$REPO_PATH"
+  fi
+fi
+`
+
+	uid := agentUID
+	initContainers = append(initContainers, corev1.Container{
+		Name:         "git-clone",
+		Image:        gitImage,
+		Command:      []string{"sh", "-c", cloneScript},
+		Env:          initEnv,
+		EnvFrom:      tokenEnvFrom,
+		VolumeMounts: initMounts,
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser:  &uid,
+			RunAsGroup: &uid,
+		},
+	})
+
+	// Main container additions.
+	extraMainEnv = append(extraMainEnv, corev1.EnvVar{Name: "REPO_PATH", Value: absRepoPath})
+	if branch != "" {
+		extraMainEnv = append(extraMainEnv, corev1.EnvVar{Name: "REPO_BRANCH", Value: branch})
+	}
+	if creds != nil {
+		if creds.UserName != "" {
+			extraMainEnv = append(extraMainEnv,
+				corev1.EnvVar{Name: "GIT_AUTHOR_NAME", Value: creds.UserName},
+				corev1.EnvVar{Name: "GIT_COMMITTER_NAME", Value: creds.UserName},
+			)
+		}
+		if creds.UserEmail != "" {
+			extraMainEnv = append(extraMainEnv,
+				corev1.EnvVar{Name: "GIT_AUTHOR_EMAIL", Value: creds.UserEmail},
+				corev1.EnvVar{Name: "GIT_COMMITTER_EMAIL", Value: creds.UserEmail},
+			)
+		}
+	}
+	if sshCommand != "" {
+		extraMainEnv = append(extraMainEnv, corev1.EnvVar{Name: "GIT_SSH_COMMAND", Value: sshCommand})
+	}
+	extraMainEnv = append(extraMainEnv, tokenEnv...)
+	extraMainEnvFrom = append(extraMainEnvFrom, tokenEnvFrom...)
+	return
+}
+
 func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.Agent, names agentNames, pvcName, configHash string, resolved []resolvedMCP) (string, int32, error) {
 	instructionMount := agent.Spec.InstructionMountPath
 	if instructionMount == "" {
@@ -443,6 +610,10 @@ func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.
 	if agent.Spec.Orchestrator && r.Cfg.OperatorURL != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: "VINCULUM_OPERATOR_URL", Value: r.Cfg.OperatorURL})
 	}
+
+	gitInitContainers, gitVolumes, gitMainMounts, gitMainEnv, gitMainEnvFrom := gitPodPieces(agent)
+	envVars = append(envVars, gitMainEnv...)
+
 	for k, v := range agent.Spec.Env {
 		envVars = append(envVars, corev1.EnvVar{Name: k, Value: v})
 	}
@@ -470,6 +641,14 @@ func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.
 			},
 		})
 	}
+	for _, ef := range gitMainEnvFrom {
+		name := ef.SecretRef.LocalObjectReference.Name
+		if seenSecrets[name] {
+			continue
+		}
+		seenSecrets[name] = true
+		envFrom = append(envFrom, ef)
+	}
 
 	replicas := int32(1)
 	podLabels := map[string]string{}
@@ -495,6 +674,7 @@ func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: names.ServiceAccount,
+					InitContainers:     gitInitContainers,
 					Containers: []corev1.Container{{
 						Name:            "agent",
 						Image:           chooseAgentImage(agent.Spec.Image, r.Cfg.AgentDefaultImage),
@@ -507,11 +687,11 @@ func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.
 							ContainerPort: agentPort,
 							Protocol:      corev1.ProtocolTCP,
 						}},
-						VolumeMounts: []corev1.VolumeMount{
+						VolumeMounts: append([]corev1.VolumeMount{
 							{Name: "workspace", MountPath: "/workspace"},
 							{Name: "config", MountPath: configMount},
 							{Name: "tmp", MountPath: "/tmp"},
-						},
+						}, gitMainMounts...),
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:    resource.MustParse("100m"),
@@ -539,7 +719,7 @@ func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.
 							PeriodSeconds:       30,
 						},
 					}},
-					Volumes: []corev1.Volume{
+					Volumes: append([]corev1.Volume{
 						{Name: "workspace", VolumeSource: corev1.VolumeSource{
 							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: pvcName},
 						}},
@@ -549,7 +729,7 @@ func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.
 							},
 						}},
 						{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-					},
+					}, gitVolumes...),
 				},
 			},
 		},

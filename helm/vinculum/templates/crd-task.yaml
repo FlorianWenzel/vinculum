@@ -81,6 +81,15 @@ spec:
                           type: object
                           properties:
                             name: {type: string}
+                git:
+                  type: object
+                  properties:
+                    baseBranch: {type: string}
+                    headBranch: {type: string}
+                    commitMessage: {type: string}
+                    prTitle: {type: string}
+                    prBody: {type: string}
+                    skipPR: {type: boolean}
             status:
               type: object
               properties:

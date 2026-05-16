@@ -22,6 +22,36 @@ type TaskSpec struct {
 	Artifacts      *ArtifactSink     `json:"artifacts,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	TimeoutSeconds int32             `json:"timeoutSeconds,omitempty"`
+	// Git, when set, makes the agent run a coding workflow around crush:
+	// check out a branch off the base before running crush, then commit +
+	// push any changes after. Optionally open a PR via the GitHub API.
+	// Requires the parent Agent to declare spec.repo.
+	Git *TaskGit `json:"git,omitempty"`
+}
+
+// TaskGit declares the per-Task git workflow that wraps a crush run.
+type TaskGit struct {
+	// BaseBranch is the branch the head branch is forked off. Defaults to
+	// the Agent's spec.repo.branch (or remote default if that's also unset).
+	BaseBranch string `json:"baseBranch,omitempty"`
+	// HeadBranch is the branch the agent commits onto and pushes. Defaults
+	// to "vinculum/task-<task.name>".
+	HeadBranch string `json:"headBranch,omitempty"`
+	// CommitMessage is the literal commit message used when the agent stages
+	// and commits crush's changes. Defaults to "vinculum: <task.name>".
+	// An empty diff after crush short-circuits: no commit, no push, no PR;
+	// Task is marked Succeeded with reason=NoChanges.
+	CommitMessage string `json:"commitMessage,omitempty"`
+	// PRTitle, if non-empty, makes the agent open a Pull Request via the
+	// GitHub REST API after pushing. Requires gitCredentials.tokenSecretRef
+	// on the Agent (the `GITHUB_TOKEN` env var is read at runtime).
+	PRTitle string `json:"prTitle,omitempty"`
+	// PRBody is the body of the PR. Empty body is allowed.
+	PRBody string `json:"prBody,omitempty"`
+	// SkipPR forces commit+push only, even if PRTitle is set. Useful for
+	// providers (GitLab, Bitbucket, self-hosted) where the GitHub API does
+	// not apply.
+	SkipPR bool `json:"skipPR,omitempty"`
 }
 
 // TaskTemplate is TaskSpec without agentRef (derived from schedule owner).
@@ -106,6 +136,10 @@ func (in *TaskSpec) DeepCopyInto(out *TaskSpec) {
 		for k, v := range in.Env {
 			out.Env[k] = v
 		}
+	}
+	if in.Git != nil {
+		cp := *in.Git
+		out.Git = &cp
 	}
 }
 

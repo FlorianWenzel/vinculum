@@ -101,10 +101,18 @@ func createAgentCmd(fromFile *string) *cobra.Command {
 		provider      string
 		instructions  string
 		enabled       = true
+		orchestrator  bool
 		concurrency   int32
 		workspaceSize = "10Gi"
 		image         string
 		mcpRefs       []string
+		repoURL       string
+		repoBranch    string
+		repoPath      string
+		sshKeySecret  string
+		tokenSecret   string
+		gitUserName   string
+		gitUserEmail  string
 	)
 	c := &cobra.Command{
 		Use:   "agent",
@@ -137,8 +145,35 @@ func createAgentCmd(fromFile *string) *cobra.Command {
 				"instructions":      instructions,
 				"providerSecretRef": provider,
 				"enabled":           enabled,
+				"orchestrator":      orchestrator,
 				"workspaceSize":     workspaceSize,
 				"mcpServerRefs":     mcpRefs,
+			}
+			if repoURL != "" {
+				repoBlock := map[string]any{"url": repoURL}
+				if repoBranch != "" {
+					repoBlock["branch"] = repoBranch
+				}
+				if repoPath != "" {
+					repoBlock["path"] = repoPath
+				}
+				body["repo"] = repoBlock
+			}
+			if sshKeySecret != "" || tokenSecret != "" || gitUserName != "" || gitUserEmail != "" {
+				gc := map[string]any{}
+				if sshKeySecret != "" {
+					gc["sshKeySecretRef"] = map[string]any{"name": sshKeySecret}
+				}
+				if tokenSecret != "" {
+					gc["tokenSecretRef"] = map[string]any{"name": tokenSecret}
+				}
+				if gitUserName != "" {
+					gc["userName"] = gitUserName
+				}
+				if gitUserEmail != "" {
+					gc["userEmail"] = gitUserEmail
+				}
+				body["gitCredentials"] = gc
 			}
 			return withOperator(ctx, kc, func(h *client.HTTP) error {
 				if err := h.PostJSON(ctx, "/api/agents", body, nil); err != nil {
@@ -154,10 +189,18 @@ func createAgentCmd(fromFile *string) *cobra.Command {
 	c.Flags().StringVar(&provider, "provider", "", "provider Secret name")
 	c.Flags().StringVar(&instructions, "instructions", "", "inline AGENTS.md content")
 	c.Flags().BoolVar(&enabled, "enabled", true, "enable agent")
+	c.Flags().BoolVar(&orchestrator, "orchestrator", false, "expose operator API to this agent (vnclm-mcp tools)")
 	c.Flags().Int32Var(&concurrency, "concurrency", 1, "")
 	c.Flags().StringVar(&workspaceSize, "workspace-size", "10Gi", "PVC size for /workspace")
 	c.Flags().StringVar(&image, "image", "", "agent container image (default: operator's default)")
 	c.Flags().StringSliceVar(&mcpRefs, "mcp", nil, "MCPServer name to attach (repeatable)")
+	c.Flags().StringVar(&repoURL, "repo-url", "", "git repo to clone into the workspace on pod start")
+	c.Flags().StringVar(&repoBranch, "repo-branch", "", "default branch to check out after clone")
+	c.Flags().StringVar(&repoPath, "repo-path", "", `subdir under /workspace for the clone (default "repo")`)
+	c.Flags().StringVar(&sshKeySecret, "ssh-key-secret", "", "Secret with key id_ed25519 (+optional known_hosts) for git over SSH")
+	c.Flags().StringVar(&tokenSecret, "token-secret", "", "Secret with key 'token' for git over HTTPS / GitHub PR creation")
+	c.Flags().StringVar(&gitUserName, "git-user", "", `commit author/committer name (default "vinculum-agent")`)
+	c.Flags().StringVar(&gitUserEmail, "git-email", "", `commit author/committer email (default "agent@vinculum.local")`)
 	_ = c.RegisterFlagCompletionFunc("provider", completeProviders())
 	_ = c.RegisterFlagCompletionFunc("mcp", completeResource(gvrMCPs))
 	return c
@@ -226,12 +269,18 @@ func listProviderNames(ctx context.Context, kc *kube.Client) ([]string, error) {
 
 func createTaskCmd(fromFile *string) *cobra.Command {
 	var (
-		name    string
-		agent   string
-		prompt  string
-		fresh   bool
-		wsMode  = "shared"
-		timeout int32 = 300
+		name       string
+		agent      string
+		prompt     string
+		fresh      bool
+		wsMode     = "shared"
+		timeout    int32 = 300
+		baseBranch string
+		headBranch string
+		commitMsg  string
+		prTitle    string
+		prBody     string
+		skipPR     bool
 	)
 	c := &cobra.Command{
 		Use:   "task",
@@ -254,16 +303,36 @@ func createTaskCmd(fromFile *string) *cobra.Command {
 					return err
 				}
 			}
-			body := map[string]any{
-				"name": name,
-				"spec": map[string]any{
-					"agentRef":       agent,
-					"prompt":         prompt,
-					"fresh":          fresh,
-					"workspace":      map[string]any{"mode": wsMode},
-					"timeoutSeconds": timeout,
-				},
+			spec := map[string]any{
+				"agentRef":       agent,
+				"prompt":         prompt,
+				"fresh":          fresh,
+				"workspace":      map[string]any{"mode": wsMode},
+				"timeoutSeconds": timeout,
 			}
+			if hasGitFlags := baseBranch != "" || headBranch != "" || commitMsg != "" || prTitle != "" || prBody != "" || skipPR; hasGitFlags {
+				g := map[string]any{}
+				if baseBranch != "" {
+					g["baseBranch"] = baseBranch
+				}
+				if headBranch != "" {
+					g["headBranch"] = headBranch
+				}
+				if commitMsg != "" {
+					g["commitMessage"] = commitMsg
+				}
+				if prTitle != "" {
+					g["prTitle"] = prTitle
+				}
+				if prBody != "" {
+					g["prBody"] = prBody
+				}
+				if skipPR {
+					g["skipPR"] = true
+				}
+				spec["git"] = g
+			}
+			body := map[string]any{"name": name, "spec": spec}
 			return withOperator(ctx, kc, func(h *client.HTTP) error {
 				if err := h.PostJSON(ctx, "/api/tasks", body, nil); err != nil {
 					return err
@@ -279,6 +348,12 @@ func createTaskCmd(fromFile *string) *cobra.Command {
 	c.Flags().BoolVar(&fresh, "fresh", false, "ignore prior session (no --continue)")
 	c.Flags().StringVar(&wsMode, "workspace", "shared", "workspace mode: shared|ephemeral")
 	c.Flags().Int32Var(&timeout, "timeout", 300, "task timeout seconds")
+	c.Flags().StringVar(&baseBranch, "base-branch", "", "git base branch (requires Agent.spec.repo)")
+	c.Flags().StringVar(&headBranch, "head-branch", "", `git head branch (default "vinculum/task-<name>")`)
+	c.Flags().StringVar(&commitMsg, "commit", "", `commit message (default "vinculum: <task>")`)
+	c.Flags().StringVar(&prTitle, "pr-title", "", "open a GitHub PR with this title after push")
+	c.Flags().StringVar(&prBody, "pr-body", "", "PR body (default: crush stdoutTail)")
+	c.Flags().BoolVar(&skipPR, "skip-pr", false, "commit + push but do not open a PR")
 	_ = c.RegisterFlagCompletionFunc("agent", completeResource(gvrAgents))
 	_ = c.RegisterFlagCompletionFunc("workspace", staticValues("shared", "ephemeral"))
 	return c

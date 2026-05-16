@@ -27,11 +27,17 @@ func isTerminal(p string) bool {
 
 func runCmd() *cobra.Command {
 	var (
-		agent   string
-		name    string
-		fresh   bool
-		wsMode  = "shared"
-		timeout int32 = 300
+		agent       string
+		name        string
+		fresh       bool
+		wsMode      = "shared"
+		timeout     int32 = 300
+		baseBranch  string
+		headBranch  string
+		commitMsg   string
+		prTitle     string
+		prBody      string
+		skipPR      bool
 	)
 	c := &cobra.Command{
 		Use:   "run <prompt>",
@@ -52,16 +58,36 @@ func runCmd() *cobra.Command {
 			if name == "" {
 				name = fmt.Sprintf("run-%d", time.Now().Unix())
 			}
-			body := map[string]any{
-				"name": name,
-				"spec": map[string]any{
-					"agentRef":       agent,
-					"prompt":         args[0],
-					"fresh":          fresh,
-					"workspace":      map[string]any{"mode": wsMode},
-					"timeoutSeconds": timeout,
-				},
+			spec := map[string]any{
+				"agentRef":       agent,
+				"prompt":         args[0],
+				"fresh":          fresh,
+				"workspace":      map[string]any{"mode": wsMode},
+				"timeoutSeconds": timeout,
 			}
+			if hasGitFlags := baseBranch != "" || headBranch != "" || commitMsg != "" || prTitle != "" || prBody != "" || skipPR; hasGitFlags {
+				g := map[string]any{}
+				if baseBranch != "" {
+					g["baseBranch"] = baseBranch
+				}
+				if headBranch != "" {
+					g["headBranch"] = headBranch
+				}
+				if commitMsg != "" {
+					g["commitMessage"] = commitMsg
+				}
+				if prTitle != "" {
+					g["prTitle"] = prTitle
+				}
+				if prBody != "" {
+					g["prBody"] = prBody
+				}
+				if skipPR {
+					g["skipPR"] = true
+				}
+				spec["git"] = g
+			}
+			body := map[string]any{"name": name, "spec": spec}
 			if err := withOperator(ctx, kc, func(h *client.HTTP) error {
 				return h.PostJSON(ctx, "/api/tasks", body, nil)
 			}); err != nil {
@@ -118,6 +144,12 @@ func runCmd() *cobra.Command {
 	c.Flags().BoolVar(&fresh, "fresh", false, "no --continue")
 	c.Flags().StringVar(&wsMode, "workspace", "shared", "shared|ephemeral")
 	c.Flags().Int32Var(&timeout, "timeout", 300, "task timeout seconds")
+	c.Flags().StringVar(&baseBranch, "base-branch", "", "git base branch (requires Agent.spec.repo)")
+	c.Flags().StringVar(&headBranch, "head-branch", "", `git head branch (default "vinculum/task-<name>")`)
+	c.Flags().StringVar(&commitMsg, "commit", "", `commit message (default "vinculum: <task>")`)
+	c.Flags().StringVar(&prTitle, "pr-title", "", "open a GitHub PR with this title after push")
+	c.Flags().StringVar(&prBody, "pr-body", "", "PR body (default: crush stdoutTail)")
+	c.Flags().BoolVar(&skipPR, "skip-pr", false, "commit + push but do not open a PR")
 	_ = c.RegisterFlagCompletionFunc("agent", completeResource(gvrAgents))
 	_ = c.RegisterFlagCompletionFunc("workspace", staticValues("shared", "ephemeral"))
 	return c

@@ -18,6 +18,18 @@ type TaskSpec struct {
 	Artifacts      *ArtifactSink     `json:"artifacts,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	TimeoutSeconds int32             `json:"timeoutSeconds,omitempty"`
+	Git            *TaskGit          `json:"git,omitempty"`
+}
+
+// TaskGit mirrors the operator's TaskGit shape. See
+// apps/operator/api/v1alpha1/task_types.go for field docs.
+type TaskGit struct {
+	BaseBranch    string `json:"baseBranch,omitempty"`
+	HeadBranch    string `json:"headBranch,omitempty"`
+	CommitMessage string `json:"commitMessage,omitempty"`
+	PRTitle       string `json:"prTitle,omitempty"`
+	PRBody        string `json:"prBody,omitempty"`
+	SkipPR        bool   `json:"skipPR,omitempty"`
 }
 
 type TaskWorkspace struct {

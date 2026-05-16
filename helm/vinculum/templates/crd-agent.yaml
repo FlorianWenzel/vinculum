@@ -81,6 +81,26 @@ spec:
                 workspaceSize: {type: string}
                 workspaceStorageClass: {type: string}
                 orchestrator: {type: boolean}
+                repo:
+                  type: object
+                  required: [url]
+                  properties:
+                    url: {type: string}
+                    branch: {type: string}
+                    path: {type: string}
+                gitCredentials:
+                  type: object
+                  properties:
+                    sshKeySecretRef:
+                      type: object
+                      properties:
+                        name: {type: string}
+                    tokenSecretRef:
+                      type: object
+                      properties:
+                        name: {type: string}
+                    userName: {type: string}
+                    userEmail: {type: string}
             status:
               type: object
               properties:

@@ -63,6 +63,8 @@ func newAPIMux(k8s client.Client, namespace string, cfg appconfig.Config) *http.
 				Enabled           *bool                      `json:"enabled"`
 				WorkspaceSize     string                     `json:"workspaceSize"`
 				Orchestrator      bool                       `json:"orchestrator"`
+				Repo              *v1alpha1.AgentRepo        `json:"repo"`
+				GitCredentials    *v1alpha1.GitCredentials   `json:"gitCredentials"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
 				jsonError(w, http.StatusBadRequest, err.Error())
@@ -97,6 +99,8 @@ func newAPIMux(k8s client.Client, namespace string, cfg appconfig.Config) *http.
 					Enabled:              enabled,
 					WorkspaceSize:        spec.WorkspaceSize,
 					Orchestrator:         spec.Orchestrator,
+					Repo:                 spec.Repo,
+					GitCredentials:       spec.GitCredentials,
 				},
 			}
 			if err := k8s.Create(ctx, obj); err != nil {

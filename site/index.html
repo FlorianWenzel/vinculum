@@ -32,7 +32,7 @@
 
 <section class="hero">
   <div class="wrap">
-    <div class="status">HIVE_STATUS: ONLINE · v0.2.0</div>
+    <div class="status">HIVE_STATUS: ONLINE · v0.3.0</div>
     <h1>The collective<br>for AI coding agents.</h1>
     <p class="tagline">Long-lived <em>crush</em> agents running as Kubernetes Deployments. One operator. Many drones. One shared link - the vinculum.</p>
     <div class="cta">
@@ -131,7 +131,7 @@
           <h3>Install the chart</h3>
           <p>Helm OCI install - no repo add, no values overrides required for a default run.</p>
 <pre><span class="cmd">helm</span> install vinculum <span class="flag">oci://</span>ghcr.io/florianwenzel/helm/vinculum \
-  <span class="flag">--version</span> 0.2.0 \
+  <span class="flag">--version</span> 0.3.0 \
   <span class="flag">-n</span> vinculum-system <span class="flag">--create-namespace</span></pre>
         </div>
       </div>
@@ -190,6 +190,60 @@
 <span class="cmd">vnclm</span> logs &lt;task&gt;                                    <span class="flag">[-f]</span>
 <span class="cmd">vnclm</span> run <span class="str">"&lt;prompt&gt;"</span>  <span class="flag">[--agent]</span> <span class="flag">[--fresh]</span> <span class="flag">[--timeout N]</span></pre>
     </div>
+  </div>
+</section>
+
+<section id="coding">
+  <div class="wrap">
+    <div class="eyebrow">Cybernetic implant</div>
+    <h2>Drones that ship code.</h2>
+    <p class="lede">Declare a repo on the Agent and a branch / PR on the Task. The operator clones on pod start; the agent wraps each crush run with the git workflow — fetch, branch, commit, push, and (for GitHub) open a PR via the REST API.</p>
+
+    <dl class="tools">
+      <div><dt>spec.repo</dt><dd>Operator adds a <code>git-clone</code> init container that hydrates <code>/workspace/&lt;path&gt;</code> on pod start. Cached on the PVC; restarts just <code>git fetch --prune</code>.</dd></div>
+      <div><dt>spec.gitCredentials</dt><dd>Reference Secrets for an SSH deploy key (<code>id_ed25519</code>) and/or an HTTPS token. Either, both, or neither.</dd></div>
+      <div><dt>Task.spec.git</dt><dd><code>baseBranch</code>, <code>headBranch</code>, <code>commitMessage</code>, <code>prTitle</code>, <code>prBody</code>, <code>skipPR</code> — all optional, sensible defaults.</dd></div>
+      <div><dt>NoChanges short-circuit</dt><dd>If crush touches no files, the Task ends <code>Succeeded</code> with <code>reason=NoChanges</code>. No branch, no commit, no PR — no noise.</dd></div>
+    </dl>
+
+    <div class="codeblock">
+      <div class="head">
+        <span>Wire up + run, declaratively</span>
+        <span class="lang">yaml</span>
+      </div>
+<pre><span class="cmt"># Agent — clones acme/api on pod start, authenticates with a PAT</span>
+<span class="key">apiVersion:</span> vinculum.dev/v1alpha1
+<span class="key">kind:</span> Agent
+<span class="key">metadata:</span>
+  <span class="key">name:</span> coder
+<span class="key">spec:</span>
+  <span class="key">model:</span> <span class="str">openrouter/anthropic/claude-sonnet-4.6</span>
+  <span class="key">providerSecretRef:</span> { <span class="key">name:</span> openrouter-provider-keys }
+  <span class="key">repo:</span>
+    <span class="key">url:</span> <span class="str">https://github.com/acme/api.git</span>
+    <span class="key">branch:</span> main
+    <span class="key">path:</span> app
+  <span class="key">gitCredentials:</span>
+    <span class="key">tokenSecretRef:</span> { <span class="key">name:</span> acme-github-pat }
+    <span class="key">userName:</span> <span class="str">"Vinculum Bot"</span>
+    <span class="key">userEmail:</span> <span class="str">"bot@acme.test"</span>
+---
+<span class="cmt"># Task — implement a feature, ship a PR</span>
+<span class="key">apiVersion:</span> vinculum.dev/v1alpha1
+<span class="key">kind:</span> Task
+<span class="key">metadata:</span>
+  <span class="key">name:</span> add-v2-health
+<span class="key">spec:</span>
+  <span class="key">agentRef:</span> coder
+  <span class="key">prompt:</span> <span class="str">"Add a /v2/health endpoint that returns {status:'ok'}."</span>
+  <span class="key">git:</span>
+    <span class="key">baseBranch:</span> main
+    <span class="key">headBranch:</span> feat/v2-health
+    <span class="key">commitMessage:</span> <span class="str">"feat: add /v2/health endpoint"</span>
+    <span class="key">prTitle:</span> <span class="str">"Add /v2/health endpoint"</span></pre>
+    </div>
+
+    <p class="aside"><span class="aside-tag">Or from the CLI</span> <code>vnclm run "implement /v2/health" --base-branch main --head-branch feat/v2-health --pr-title "Add /v2/health"</code>. <code>skipPR: true</code> commits + pushes without opening a PR — for GitLab / Bitbucket / self-hosted hosts.</p>
   </div>
 </section>
 

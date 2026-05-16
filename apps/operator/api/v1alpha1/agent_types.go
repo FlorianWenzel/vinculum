@@ -47,6 +47,46 @@ type AgentSpec struct {
 	// (VINCULUM_OPERATOR_URL) so the agent can dispatch Tasks to peer Agents via
 	// the vinculum MCP server.
 	Orchestrator bool `json:"orchestrator,omitempty"`
+	// Repo, when set, makes the operator add an init container to the agent
+	// Deployment that clones (or fetches) the repo into the workspace PVC
+	// before the agent's first Task. The clone is cached on the PVC so pod
+	// restarts skip the clone and just fetch refs.
+	Repo *AgentRepo `json:"repo,omitempty"`
+	// GitCredentials references Secrets the operator mounts into the init
+	// container and main agent container so private repos and git push /
+	// PR creation work. Either, both, or neither field may be set.
+	GitCredentials *GitCredentials `json:"gitCredentials,omitempty"`
+}
+
+// AgentRepo declares the git repository an Agent works against.
+type AgentRepo struct {
+	// URL of the git repo. Supports ssh://… and git@host:owner/repo as well
+	// as https://… URLs.
+	URL string `json:"url"`
+	// Branch to check out after clone/fetch. Empty means the remote default.
+	Branch string `json:"branch,omitempty"`
+	// Path is the directory under /workspace where the repo is cloned.
+	// Defaults to "repo". This becomes the agent's working directory for
+	// crush runs.
+	Path string `json:"path,omitempty"`
+}
+
+// GitCredentials wires authentication Secrets into the agent pod.
+type GitCredentials struct {
+	// SSHKeySecretRef names a Secret containing an SSH private key (key
+	// "id_ed25519" or "ssh-privatekey") and optional "known_hosts".
+	SSHKeySecretRef *SecretRef `json:"sshKeySecretRef,omitempty"`
+	// TokenSecretRef names a Secret containing an HTTPS access token. The
+	// Secret's keys are env-injected into the main agent container (so
+	// GITHUB_TOKEN, GITLAB_TOKEN, etc. surface for PR creation), and a key
+	// named "token" — or the first key — is wired through a GIT_ASKPASS
+	// helper so git over HTTPS can authenticate.
+	TokenSecretRef *SecretRef `json:"tokenSecretRef,omitempty"`
+	// UserName for git commit author/committer. Defaults to "vinculum-agent".
+	UserName string `json:"userName,omitempty"`
+	// UserEmail for git commit author/committer. Defaults to
+	// "agent@vinculum.local".
+	UserEmail string `json:"userEmail,omitempty"`
 }
 
 type AgentStatus struct {
@@ -142,6 +182,20 @@ func (in *AgentSpec) DeepCopyInto(out *AgentSpec) {
 	if in.WorkspaceStorageClass != nil {
 		v := *in.WorkspaceStorageClass
 		out.WorkspaceStorageClass = &v
+	}
+	if in.Repo != nil {
+		cp := *in.Repo
+		out.Repo = &cp
+	}
+	if in.GitCredentials != nil {
+		gc := *in.GitCredentials
+		if in.GitCredentials.SSHKeySecretRef != nil {
+			gc.SSHKeySecretRef = &SecretRef{Name: in.GitCredentials.SSHKeySecretRef.Name}
+		}
+		if in.GitCredentials.TokenSecretRef != nil {
+			gc.TokenSecretRef = &SecretRef{Name: in.GitCredentials.TokenSecretRef.Name}
+		}
+		out.GitCredentials = &gc
 	}
 }
 

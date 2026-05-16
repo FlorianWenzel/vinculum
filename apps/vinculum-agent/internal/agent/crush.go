@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/florian/vinculum/apps/vinculum-agent/internal/config"
+	"github.com/florian/vinculum/apps/vinculum-agent/internal/git"
 	"github.com/florian/vinculum/apps/vinculum-agent/internal/tasks"
 )
 
@@ -47,8 +48,24 @@ func (e *Executor) Execute(ctx context.Context, state *tasks.State, workdir stri
 		return errors.New("prompt is required")
 	}
 
+	// If the Task carries a git workflow, redirect crush's working directory
+	// to the cloned repo and run the pre-crush branch checkout before
+	// running crush.
+	runDir := workdir
+	gitSpec := state.Payload.Spec.Git
+	if gitSpec != nil {
+		repoPath := strings.TrimSpace(os.Getenv("REPO_PATH"))
+		if repoPath == "" {
+			return errors.New("Task.spec.git requires Agent.spec.repo (REPO_PATH env not set)")
+		}
+		if err := e.gitPreCrush(ctx, repoPath, gitSpec, state.Payload.Name); err != nil {
+			return fmt.Errorf("git pre-crush: %w", err)
+		}
+		runDir = repoPath
+	}
+
 	wantContinue := !state.Payload.Spec.Fresh
-	stdout, stderr, exitCode, runErr := e.runCrush(ctx, state, workdir, prompt, wantContinue)
+	stdout, stderr, exitCode, runErr := e.runCrush(ctx, state, runDir, prompt, wantContinue)
 
 	// crush fails hard when --continue is requested but no prior session exists.
 	// Fall back to a fresh run so the first Task on a new Agent doesn't error out.
@@ -56,7 +73,7 @@ func (e *Executor) Execute(ctx context.Context, state *tasks.State, workdir stri
 		if e.logger != nil {
 			e.logger.Printf("crush: no prior session, retrying without --continue")
 		}
-		stdout, stderr, exitCode, runErr = e.runCrush(ctx, state, workdir, prompt, false)
+		stdout, stderr, exitCode, runErr = e.runCrush(ctx, state, runDir, prompt, false)
 	}
 
 	state.StdoutTail = tail(stdout, tailBytes)
@@ -71,11 +88,17 @@ func (e *Executor) Execute(ctx context.Context, state *tasks.State, workdir stri
 		return fmt.Errorf("crush exited %d", exitCode)
 	}
 
+	if gitSpec != nil {
+		if err := e.gitPostCrush(ctx, state, gitSpec); err != nil {
+			return fmt.Errorf("git post-crush: %w", err)
+		}
+	}
+
 	uris, err := e.persistArtifacts(ctx, state, workdir)
 	if err != nil {
 		return fmt.Errorf("persist artifacts: %w", err)
 	}
-	state.Artifacts = uris
+	state.Artifacts = append(state.Artifacts, uris...)
 	return nil
 }
 
@@ -239,4 +262,138 @@ func tail(s string, limit int) string {
 		return s
 	}
 	return s[len(s)-limit:]
+}
+
+// gitPreCrush runs the pre-task git steps: fetch origin and check out the
+// head branch (creating it if needed) off the base branch.
+func (e *Executor) gitPreCrush(ctx context.Context, repoPath string, spec *tasks.TaskGit, taskName string) error {
+	base := strings.TrimSpace(spec.BaseBranch)
+	if base == "" {
+		base = strings.TrimSpace(os.Getenv("REPO_BRANCH"))
+	}
+	if base == "" {
+		return errors.New("baseBranch is required (Task.spec.git.baseBranch or Agent.spec.repo.branch)")
+	}
+	head := strings.TrimSpace(spec.HeadBranch)
+	if head == "" {
+		head = "vinculum/task-" + taskName
+	}
+	repo := git.Open(repoPath)
+	if err := repo.Verify(ctx); err != nil {
+		return fmt.Errorf("repo at %s not a git work tree: %w", repoPath, err)
+	}
+	// Keep vinculum's runtime droppings out of the commit. The instruction
+	// file (AGENTS.md by default) gets symlinked into the workdir before
+	// each crush run; without an exclude entry it lands in `git status` and
+	// gets staged by AddAll.
+	excludes := []string{".vnclm-scratch/"}
+	if name := filepath.Base(strings.TrimSpace(e.cfg.InstructionFile)); name != "" && name != "." && name != string(filepath.Separator) {
+		excludes = append(excludes, name)
+	}
+	if err := repo.AppendInfoExclude(ctx, excludes...); err != nil {
+		if e.logger != nil {
+			e.logger.Printf("git info/exclude: %v (continuing)", err)
+		}
+	}
+	if err := repo.Fetch(ctx); err != nil {
+		// Fetch can fail on network blips or in tests with a local-only
+		// remote — log it but don't abort. Checkout still needs the local
+		// base branch to exist.
+		if e.logger != nil {
+			e.logger.Printf("git fetch: %v (continuing)", err)
+		}
+	}
+	if err := repo.CheckoutNewBranch(ctx, head, base); err != nil {
+		return fmt.Errorf("checkout %s from %s: %w", head, base, err)
+	}
+	if e.logger != nil {
+		e.logger.Printf("git: checked out %s from %s", head, base)
+	}
+	return nil
+}
+
+// gitPostCrush stages, commits, pushes, and (optionally) opens a PR after a
+// successful crush run. If the working tree is clean, the Task is marked
+// Succeeded with reason=NoChanges and the rest is skipped.
+func (e *Executor) gitPostCrush(ctx context.Context, state *tasks.State, spec *tasks.TaskGit) error {
+	repoPath := strings.TrimSpace(os.Getenv("REPO_PATH"))
+	repo := git.Open(repoPath)
+
+	dirty, err := repo.HasChanges(ctx)
+	if err != nil {
+		return fmt.Errorf("git status: %w", err)
+	}
+	if !dirty {
+		state.Reason = "NoChanges"
+		state.Message = "crush made no changes to the working tree"
+		if e.logger != nil {
+			e.logger.Printf("git: no changes after crush, skipping commit + push")
+		}
+		return nil
+	}
+
+	if err := repo.AddAll(ctx); err != nil {
+		return fmt.Errorf("git add: %w", err)
+	}
+	msg := strings.TrimSpace(spec.CommitMessage)
+	if msg == "" {
+		msg = "vinculum: " + state.Payload.Name
+	}
+	if err := repo.Commit(ctx, msg, false); err != nil {
+		return fmt.Errorf("git commit: %w", err)
+	}
+	head := strings.TrimSpace(spec.HeadBranch)
+	if head == "" {
+		head = "vinculum/task-" + state.Payload.Name
+	}
+	if err := repo.Push(ctx, head, true); err != nil {
+		return fmt.Errorf("git push: %w", err)
+	}
+	sha, _ := repo.HeadSHA(ctx)
+	if e.logger != nil {
+		e.logger.Printf("git: pushed %s @ %s", head, sha)
+	}
+
+	// PR creation is optional and GitHub-only for v0.3. Empty PRTitle or
+	// SkipPR short-circuits.
+	if spec.SkipPR || strings.TrimSpace(spec.PRTitle) == "" {
+		return nil
+	}
+	remoteURL, err := repo.RemoteURL(ctx)
+	if err != nil {
+		return fmt.Errorf("git remote: %w", err)
+	}
+	owner, name, err := git.ParseGitHubRepo(remoteURL)
+	if err != nil {
+		if e.logger != nil {
+			e.logger.Printf("git: %v — skipping PR creation (non-GitHub remote)", err)
+		}
+		return nil
+	}
+	token := strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("GIT_TOKEN"))
+	}
+	if token == "" {
+		return errors.New("PRTitle set but no GitHub token available (set gitCredentials.tokenSecretRef with key GITHUB_TOKEN or token)")
+	}
+	base := strings.TrimSpace(spec.BaseBranch)
+	if base == "" {
+		base = strings.TrimSpace(os.Getenv("REPO_BRANCH"))
+	}
+	body := spec.PRBody
+	if body == "" {
+		body = state.StdoutTail
+	}
+	pr, err := git.NewGitHubClient(token).CreatePR(ctx, owner, name, git.GitHubPRRequest{
+		Title: spec.PRTitle, Head: head, Base: base, Body: body,
+	})
+	if err != nil {
+		return fmt.Errorf("create PR: %w", err)
+	}
+	state.Artifacts = append(state.Artifacts, pr.HTMLURL)
+	if e.logger != nil {
+		e.logger.Printf("git: opened PR #%d at %s", pr.Number, pr.HTMLURL)
+	}
+	return nil
 }
