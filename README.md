@@ -239,7 +239,7 @@ Full example: [`.local/agent-coder.yaml`](.local/agent-coder.yaml).
 
 ```bash
 helm install vinculum oci://ghcr.io/florianwenzel/helm/vinculum \
-  --version 0.4.1 \
+  --version 0.4.2 \
   -n vinculum-system --create-namespace
 ```
 
@@ -257,7 +257,7 @@ brew install FlorianWenzel/vinculum/vnclm
 **Prebuilt binary** (macOS / Linux / Windows — amd64 / arm64):
 
 ```bash
-VERSION=v0.4.1
+VERSION=v0.4.2
 OS=darwin      # linux | darwin | windows
 ARCH=arm64     # amd64 | arm64
 curl -L -o vnclm \

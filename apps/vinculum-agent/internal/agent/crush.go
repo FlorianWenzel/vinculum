@@ -387,7 +387,10 @@ func (e *Executor) gitPostCrush(ctx context.Context, state *tasks.State, spec *t
 	if head == "" {
 		head = "vinculum/task-" + state.Payload.Name
 	}
-	if err := repo.Push(ctx, head, true); err != nil {
+	// force-with-lease lets a re-run with the same headBranch overwrite the
+	// prior commit safely (refuses if a third party pushed since). Without
+	// this, re-runs fail with non-fast-forward.
+	if err := repo.Push(ctx, head, true, true); err != nil {
 		return fmt.Errorf("git push: %w", err)
 	}
 	sha, _ := repo.HeadSHA(ctx)

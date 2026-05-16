@@ -9,6 +9,17 @@ Release artifacts and one-line summaries also live on the
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-05-16
+
+### Fixed
+- **Idempotent re-pushes work end-to-end.** v0.4.1 added the
+  PR-already-exists handler but the `git push` ahead of it would fail
+  non-fast-forward on the second run with the same head branch (because
+  the agent re-checks-out from base each Task). v0.4.2 pushes with
+  `--force-with-lease` so the prior commit on the same head branch is
+  safely overwritten. New test
+  `TestPush_ForceWithLease_OverwritesDivergedRemote` codifies it.
+
 ## [0.4.1] — 2026-05-16
 
 ### Added

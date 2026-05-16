@@ -108,7 +108,7 @@ func TestRepoLifecycle(t *testing.T) {
 		t.Fatalf("HeadSHA=%q err=%v", sha, err)
 	}
 
-	if err := r.Push(ctx, "feat/x", true); err != nil {
+	if err := r.Push(ctx, "feat/x", true, false); err != nil {
 		t.Fatalf("push: %v", err)
 	}
 
@@ -122,6 +122,53 @@ func TestRepoLifecycle(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "refs/heads/feat/x") {
 		t.Errorf("push didn't land: %q", string(out))
+	}
+}
+
+func TestPush_ForceWithLease_OverwritesDivergedRemote(t *testing.T) {
+	clone, env := setupRepo(t)
+	r := Open(clone).WithEnv(env...)
+	ctx := context.Background()
+
+	// First push: a normal commit on a new branch.
+	if err := r.CheckoutNewBranch(ctx, "feat/y", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(clone, "a.txt"), []byte("v1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.AddAll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Commit(ctx, "v1", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Push(ctx, "feat/y", true, false); err != nil {
+		t.Fatalf("first push: %v", err)
+	}
+
+	// Simulate the runtime's "re-run from base" pattern: throw away local
+	// state, re-checkout from base, make a different commit.
+	if err := r.CheckoutNewBranch(ctx, "feat/y", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(clone, "a.txt"), []byte("v2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.AddAll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Commit(ctx, "v2", false); err != nil {
+		t.Fatal(err)
+	}
+
+	// Plain push should be rejected (non-fast-forward).
+	if err := r.Push(ctx, "feat/y", false, false); err == nil {
+		t.Error("plain push to diverged remote should be rejected")
+	}
+	// force-with-lease should succeed.
+	if err := r.Push(ctx, "feat/y", false, true); err != nil {
+		t.Errorf("force-with-lease push: %v", err)
 	}
 }
 

@@ -110,13 +110,20 @@ func (r *Repo) Commit(ctx context.Context, message string, allowEmpty bool) erro
 
 // Push sends the named branch upstream to origin. SetUpstream=true mirrors
 // the `--set-upstream` flag (needed on first push of a branch).
-func (r *Repo) Push(ctx context.Context, branch string, setUpstream bool) error {
+// ForceWithLease overwrites the remote head (safely — refuses if a third
+// party pushed concurrently); needed for idempotent vinculum re-runs that
+// start each Task from base and overwrite their prior commit on the same
+// head branch.
+func (r *Repo) Push(ctx context.Context, branch string, setUpstream, forceWithLease bool) error {
 	if branch == "" {
 		return errors.New("branch is required")
 	}
 	args := []string{"push"}
 	if setUpstream {
 		args = append(args, "--set-upstream")
+	}
+	if forceWithLease {
+		args = append(args, "--force-with-lease")
 	}
 	args = append(args, "origin", branch)
 	_, err := r.run(ctx, args...)
