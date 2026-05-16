@@ -695,40 +695,48 @@
     labelTimer = setTimeout(() => ghStatus.classList.remove('show'), durMs);
   }
 
+  // Issue/PR numbers tick up each loop: cycle 0 → #17,#18; cycle 1 → #19,#20; …
+  // Computed at fire time so the label refers to the current loop iteration.
+  let cycleCount = 0;
+  const issueNum = () => 17 + cycleCount * 2;
+  const prNum    = () => 18 + cycleCount * 2;
+
   // Sequential 3-stage collaboration. Each drone's github push is followed
   // by a return packet to locutus, mirroring how vnclm-mcp's wait_task
-  // returns task status to the master agent.
+  // returns task status to the master agent. Packet durations are halved
+  // vs. the original draft so the dots feel snappier; label dwell time
+  // (showStatus durMs) is unchanged so the github banner stays readable.
   const timeline = [
-    { at: 0.10, fn: () => emitPacket('edge-you-master', { dur: 1.0, color: amberC }) },
-    { at: 1.05, fn: () => pulse('master', 800) },
+    { at: 0.05,  fn: () => emitPacket('edge-you-master', { dur: 0.5, color: amberC }) },
+    { at: 0.525, fn: () => pulse('master', 800) },
 
-    { at: 1.70, fn: () => emitPacket('edge-master-a') },
-    { at: 2.55, fn: () => pulse('a', 800) },
-    { at: 3.25, fn: () => emitPacket('edge-a-github', { dur: 0.9, color: cyanC, r: 5 }) },
-    { at: 4.20, fn: () => { pulse('github', 1000); showStatus('ISSUE #17 OPENED'); } },
-    { at: 4.75, fn: () => emitPacket('edge-master-a', { reverse: true, dur: 0.8 }) },
-    { at: 5.50, fn: () => pulse('master', 450) },
+    { at: 0.85,  fn: () => emitPacket('edge-master-a', { dur: 0.45 }) },
+    { at: 1.275, fn: () => pulse('a', 800) },
+    { at: 1.625, fn: () => emitPacket('edge-a-github', { dur: 0.45, color: cyanC, r: 5 }) },
+    { at: 2.10,  fn: () => { pulse('github', 1000); showStatus(`ISSUE #${issueNum()} OPENED`); } },
+    { at: 2.375, fn: () => emitPacket('edge-master-a', { reverse: true, dur: 0.4 }) },
+    { at: 2.75,  fn: () => pulse('master', 450) },
 
-    { at: 6.10, fn: () => emitPacket('edge-master-b') },
-    { at: 6.95, fn: () => pulse('b', 800) },
-    { at: 7.60, fn: () => emitPacket('edge-b-github', { dur: 0.9, color: cyanC, r: 5 }) },
-    { at: 8.50, fn: () => { pulse('github', 1000); showStatus('PR #42 OPENED'); } },
-    { at: 9.05, fn: () => emitPacket('edge-master-b', { reverse: true, dur: 0.8 }) },
-    { at: 9.80, fn: () => pulse('master', 450) },
+    { at: 3.05,  fn: () => emitPacket('edge-master-b', { dur: 0.45 }) },
+    { at: 3.475, fn: () => pulse('b', 800) },
+    { at: 3.80,  fn: () => emitPacket('edge-b-github', { dur: 0.45, color: cyanC, r: 5 }) },
+    { at: 4.25,  fn: () => { pulse('github', 1000); showStatus(`PR #${prNum()} OPENED`); } },
+    { at: 4.525, fn: () => emitPacket('edge-master-b', { reverse: true, dur: 0.4 }) },
+    { at: 4.90,  fn: () => pulse('master', 450) },
 
-    { at: 10.40, fn: () => emitPacket('edge-master-g') },
-    { at: 11.25, fn: () => pulse('g', 800) },
-    { at: 11.95, fn: () => emitPacket('edge-g-github', { dur: 0.9, color: cyanC, r: 5 }) },
-    { at: 12.85, fn: () => { pulse('github', 1100); showStatus('REVIEW APPROVED ✓'); } },
-    { at: 13.40, fn: () => emitPacket('edge-master-g', { reverse: true, dur: 0.8 }) },
-    { at: 14.15, fn: () => pulse('master', 450) },
+    { at: 5.20,  fn: () => emitPacket('edge-master-g', { dur: 0.45 }) },
+    { at: 5.625, fn: () => pulse('g', 800) },
+    { at: 5.975, fn: () => emitPacket('edge-g-github', { dur: 0.45, color: cyanC, r: 5 }) },
+    { at: 6.425, fn: () => { pulse('github', 1100); showStatus(`PR #${prNum()} APPROVED ✓`); } },
+    { at: 6.70,  fn: () => emitPacket('edge-master-g', { reverse: true, dur: 0.4 }) },
+    { at: 7.075, fn: () => pulse('master', 450) },
 
-    { at: 14.85, fn: () => pulse('master', 900) },
-    { at: 15.50, fn: () => emitPacket('edge-master-you', { dur: 1.0, color: amberC }) },
-    { at: 16.55, fn: () => pulse('you', 700) },
+    { at: 7.425, fn: () => pulse('master', 900) },
+    { at: 7.75,  fn: () => emitPacket('edge-master-you', { dur: 0.5, color: amberC }) },
+    { at: 8.275, fn: () => pulse('you', 700) },
   ];
 
-  const cycleDur = 18.5;
+  const cycleDur = 9.25;
   let cycleStart = performance.now();
   let nextIdx    = 0;
 
@@ -737,6 +745,7 @@
     if (elapsed >= cycleDur) {
       cycleStart = now;
       nextIdx = 0;
+      cycleCount++;
     } else {
       while (nextIdx < timeline.length && timeline[nextIdx].at <= elapsed) {
         timeline[nextIdx].fn();
@@ -751,7 +760,7 @@
     setTimeout(() => pulse('a'), 600);
     setTimeout(() => pulse('b'), 1200);
     setTimeout(() => pulse('g'), 1800);
-    setTimeout(() => { pulse('github'); showStatus('REVIEW APPROVED ✓', 4000); }, 2400);
+    setTimeout(() => { pulse('github'); showStatus(`PR #${prNum()} APPROVED ✓`, 4000); }, 2400);
   } else {
     requestAnimationFrame(frame);
   }
