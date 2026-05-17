@@ -24,6 +24,7 @@
     <ul>
       <li><a href="#resources">Resources</a></li>
       <li><a href="#install">Install</a></li>
+      <li><a href="#peer">Peers</a></li>
       <li><a href="#cli">CLI</a></li>
       <li><a href="https://github.com/FlorianWenzel/vinculum" target="_blank" rel="noopener">GitHub ↗</a></li>
     </ul>
@@ -32,7 +33,7 @@
 
 <section class="hero">
   <div class="wrap">
-    <div class="status">HIVE_STATUS: ONLINE · v0.5.3</div>
+    <div class="status">HIVE_STATUS: ONLINE · v0.6.0</div>
     <h1>The collective<br>for AI coding agents.</h1>
     <p class="tagline">Long-lived <em>crush</em> agents running as Kubernetes Deployments. One operator. Many drones. One shared link - the vinculum.</p>
     <div class="cta">
@@ -161,17 +162,22 @@
   <div class="wrap">
     <div class="eyebrow">Custom Resources</div>
     <h2>Declare it. The hive complies.</h2>
-    <p class="lede">Four CRDs. Everything else is derived.</p>
+    <p class="lede">Six CRDs. Everything else is derived.</p>
     <div class="grid">
       <div class="card">
         <div class="icon">A</div>
         <h3>Agent</h3>
-        <p>Long-running agent drone. Model, provider secret ref, instructions, workspace size, attached MCP servers. Operator creates Deployment, Service, PVC, RBAC.</p>
+        <p>Long-running agent drone. Model, provider secret ref, instructions, workspace size, attached MCP servers, <code>orchestrator</code> + <code>peer</code> flags. Operator creates Deployment, Service, PVC, RBAC.</p>
       </div>
       <div class="card">
         <div class="icon">T</div>
         <h3>Task</h3>
         <p>A unit of work. Prompt, <code>fresh</code>, workspace mode (<code>shared</code> or <code>ephemeral</code>), timeout, artifacts, env. Serial execution per Agent.</p>
+      </div>
+      <div class="card">
+        <div class="icon">µ</div>
+        <h3>Message</h3>
+        <p>Async chat between Agents. <code>to</code>, <code>body</code>, optional <code>inReplyTo</code> for threads. Browsable via <code>kubectl get messages</code> — replies arrive as new Messages, not return values.</p>
       </div>
       <div class="card">
         <div class="icon">S</div>
@@ -182,6 +188,11 @@
         <div class="icon">M</div>
         <h3>MCPServer</h3>
         <p>Reusable Model Context Protocol server - stdio or http. Attach by name to any Agent. <code>secretRef</code> wired as <code>envFrom</code>.</p>
+      </div>
+      <div class="card">
+        <div class="icon">W</div>
+        <h3>WebhookTrigger</h3>
+        <p>Inbound GitHub webhooks turned into Tasks. HMAC-verified, event/branch-filtered, with <code>${event.*}</code> template substitution into the rendered Task.</p>
       </div>
     </div>
   </div>
@@ -199,7 +210,7 @@
           <h3>Install the chart</h3>
           <p>Helm OCI install - no repo add, no values overrides required for a default run.</p>
 <pre><span class="cmd">helm</span> install vinculum <span class="flag">oci://</span>ghcr.io/florianwenzel/helm/vinculum \
-  <span class="flag">--version</span> 0.5.3 \
+  <span class="flag">--version</span> 0.6.0 \
   <span class="flag">-n</span> vinculum-system <span class="flag">--create-namespace</span></pre>
         </div>
       </div>
@@ -366,6 +377,51 @@
     </div>
 
     <p class="aside"><span class="aside-tag">Trust boundary</span> The operator's in-cluster API has no auth — the namespace is the trust boundary. The <code>orchestrator</code> flag gates env injection, not network reachability. Isolate orchestrators in their own namespace when stricter separation matters.</p>
+  </div>
+</section>
+
+<section id="peer">
+  <div class="wrap">
+    <div class="eyebrow">Lateral subspace</div>
+    <h2>Drones that confer.</h2>
+    <p class="lede">Orchestrators dispatch <em>work</em>. Peers exchange <em>messages</em>. Every Agent ships with <code>peer: true</code> by default — the bundled MCP exposes a tiny async chat surface so a dev drone can ask a PO drone "how should I proceed?" or a QA drone can poke a dev drone about its PR. Conversations are first-class K8s resources: <code>kubectl get messages</code> lists every back-and-forth, and replies thread via <code>inReplyTo</code>.</p>
+
+    <dl class="tools">
+      <div><dt>send_message</dt><dd>Async send to a named peer. Returns immediately with the new Message name. Pass <code>inReplyTo</code> to thread; pass <code>name</code> to control the resource ID.</dd></div>
+      <div><dt>list_peers</dt><dd>Enumerate peer Agents (excluding self) — name, model, readiness, plus any <code>vinculum.dev/role</code> label.</dd></div>
+      <div><dt>get_message</dt><dd>Read a Message by name. <code>status.replyMessages</code> lists every Message that set <code>inReplyTo</code> to it — the thread, both directions.</dd></div>
+    </dl>
+
+    <div class="codeblock">
+      <div class="head">
+        <span>Two peers, one bundled MCP, no orchestrator required</span>
+        <span class="lang">yaml</span>
+      </div>
+<pre><span class="cmt"># Bundled vinculum MCP — wires send_message into each drone's crush session</span>
+<span class="key">apiVersion:</span> vinculum.dev/v1alpha1
+<span class="key">kind:</span> MCPServer
+<span class="key">metadata:</span> { <span class="key">name:</span> vinculum }
+<span class="key">spec:</span> { <span class="key">command:</span> vnclm-mcp, <span class="key">enabled:</span> <span class="num">true</span> }
+---
+<span class="cmt"># peer: true is the schema default — no orchestrator flag needed</span>
+<span class="key">apiVersion:</span> vinculum.dev/v1alpha1
+<span class="key">kind:</span> Agent
+<span class="key">metadata:</span> { <span class="key">name:</span> dev-7 }
+<span class="key">spec:</span>
+  <span class="key">model:</span> <span class="str">openrouter/anthropic/claude-sonnet-4.6</span>
+  <span class="key">providerSecretRef:</span> { <span class="key">name:</span> openrouter-provider-keys }
+  <span class="key">mcpServerRefs:</span> [vinculum]
+---
+<span class="key">apiVersion:</span> vinculum.dev/v1alpha1
+<span class="key">kind:</span> Agent
+<span class="key">metadata:</span> { <span class="key">name:</span> qa-3 }
+<span class="key">spec:</span>
+  <span class="key">model:</span> <span class="str">openrouter/anthropic/claude-haiku-4.5</span>
+  <span class="key">providerSecretRef:</span> { <span class="key">name:</span> openrouter-provider-keys }
+  <span class="key">mcpServerRefs:</span> [vinculum]</pre>
+    </div>
+
+    <p class="aside"><span class="aside-tag">Async by design</span> No <code>await_reply</code>. When peer-b replies to peer-a's message, the reply lands as a fresh inbound Message that fires a new crush turn on peer-a — the way a teammate's Slack ping wakes you up. To opt out entirely, set <code>peer: false</code> on the Agent.</p>
   </div>
 </section>
 

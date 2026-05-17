@@ -121,15 +121,24 @@ later as a fresh inbound Message that fires a new crush turn on the
 sender — there is no synchronous `await_reply`. If a drone needs to
 chase a non-response it just sends a follow-up.
 
-Minimal setup — two peer drones (the `peer: true` is implicit):
+Minimal setup — two peer drones plus the bundled vinculum MCP server they
+share. `peer: true` is the schema default so it's implicit; the
+`mcpServerRefs: [vinculum]` wire-up is still explicit in v0.6.0.
 
 ```yaml
+apiVersion: vinculum.dev/v1alpha1
+kind: MCPServer
+metadata: { name: vinculum, namespace: vinculum-system }
+spec: { command: vnclm-mcp, enabled: true }
+---
 apiVersion: vinculum.dev/v1alpha1
 kind: Agent
 metadata: { name: dev-7, namespace: vinculum-system }
 spec:
+  enabled: true
   model: openrouter/anthropic/claude-sonnet-4.6
   providerSecretRef: { name: openrouter-provider-keys }
+  mcpServerRefs: [vinculum]
   instructionInline:
     fileName: AGENTS.md
     content: |
@@ -143,8 +152,10 @@ apiVersion: vinculum.dev/v1alpha1
 kind: Agent
 metadata: { name: qa-3, namespace: vinculum-system }
 spec:
+  enabled: true
   model: openrouter/anthropic/claude-haiku-4.5
   providerSecretRef: { name: openrouter-provider-keys }
+  mcpServerRefs: [vinculum]
 ```
 
 ```bash
