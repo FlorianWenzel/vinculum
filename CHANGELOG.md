@@ -9,6 +9,19 @@ Release artifacts and one-line summaries also live on the
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-05-17
+
+### Fixed
+- **Multi-arch image builds.** `publish-images.yaml` was only building
+  `linux/amd64`, which crashed under Rosetta/qemu emulation on
+  arm64 nodes (M-series Mac via Rancher Desktop, Graviton, …) with a
+  Go runtime SIGSEGV in `runtime.netpoll`. Workflow now builds
+  `linux/amd64,linux/arm64` so the published `:0.5.3` image runs
+  natively on both. Existing arm64 users on `:0.5.1` / `:0.5.2`
+  should `helm upgrade --version 0.5.3` and roll their agent pods.
+
+[Release notes](https://github.com/FlorianWenzel/vinculum/releases/tag/v0.5.3)
+
 ## [0.5.2] — 2026-05-17
 
 ### Added

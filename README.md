@@ -226,7 +226,7 @@ Defaults: `baseBranch` falls back to the Agent's `repo.branch`; `headBranch` def
 
 Full example: [`.local/agent-coder.yaml`](.local/agent-coder.yaml).
 
-#### LLM-driven GitHub ops via `gh` (v0.5.2)
+#### LLM-driven GitHub ops via `gh` (v0.5.2+)
 
 Beyond the declarative `spec.git` workflow, the agent image bakes in
 GitHub's `gh` CLI so prompts can drive operations the declarative path
@@ -301,7 +301,7 @@ Full example: [`.local/webhook-trigger.yaml`](.local/webhook-trigger.yaml).
 
 ```bash
 helm install vinculum oci://ghcr.io/florianwenzel/helm/vinculum \
-  --version 0.5.2 \
+  --version 0.5.3 \
   -n vinculum-system --create-namespace
 ```
 
@@ -319,7 +319,7 @@ brew install FlorianWenzel/vinculum/vnclm
 **Prebuilt binary** (macOS / Linux / Windows — amd64 / arm64):
 
 ```bash
-VERSION=v0.5.2
+VERSION=v0.5.3
 OS=darwin      # linux | darwin | windows
 ARCH=arm64     # amd64 | arm64
 curl -L -o vnclm \
