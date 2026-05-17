@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,6 +73,7 @@ func newAPIMux(k8s client.Client, namespace string, cfg appconfig.Config) *http.
 				Enabled           *bool                      `json:"enabled"`
 				WorkspaceSize     string                     `json:"workspaceSize"`
 				Orchestrator      bool                       `json:"orchestrator"`
+				Peer              *bool                      `json:"peer"`
 				Repo              *v1alpha1.AgentRepo        `json:"repo"`
 				GitCredentials    *v1alpha1.GitCredentials   `json:"gitCredentials"`
 				AllowedTools      []string                   `json:"allowedTools"`
@@ -110,6 +112,7 @@ func newAPIMux(k8s client.Client, namespace string, cfg appconfig.Config) *http.
 					Enabled:              enabled,
 					WorkspaceSize:        spec.WorkspaceSize,
 					Orchestrator:         spec.Orchestrator,
+					Peer:                 spec.Peer,
 					Repo:                 spec.Repo,
 					GitCredentials:       spec.GitCredentials,
 					AllowedTools:         spec.AllowedTools,
@@ -218,6 +221,117 @@ func newAPIMux(k8s client.Client, namespace string, cfg appconfig.Config) *http.
 			jsonOK(w, obj)
 		case http.MethodDelete:
 			obj := &v1alpha1.Task{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
+			if err := k8s.Delete(ctx, obj); err != nil {
+				jsonError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/api/messages", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		switch r.Method {
+		case http.MethodGet:
+			var list v1alpha1.MessageList
+			if err := k8s.List(ctx, &list, scopedList(namespace)...); err != nil {
+				jsonError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			items := list.Items
+			if to := strings.TrimSpace(r.URL.Query().Get("to")); to != "" {
+				filtered := items[:0]
+				for _, m := range items {
+					if m.Spec.To == to {
+						filtered = append(filtered, m)
+					}
+				}
+				items = filtered
+			}
+			if from := strings.TrimSpace(r.URL.Query().Get("from")); from != "" {
+				filtered := items[:0]
+				for _, m := range items {
+					if m.Spec.From == from {
+						filtered = append(filtered, m)
+					}
+				}
+				items = filtered
+			}
+			jsonOK(w, items)
+		case http.MethodPost:
+			body := struct {
+				Name string               `json:"name"`
+				Spec v1alpha1.MessageSpec `json:"spec"`
+			}{}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				jsonError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			from := strings.TrimSpace(r.Header.Get(fromAgentHeader))
+			if from == "" {
+				jsonError(w, http.StatusBadRequest, fromAgentHeader+" header is required (messages are agent-to-agent)")
+				return
+			}
+			if body.Spec.To == "" || strings.TrimSpace(body.Spec.Body) == "" {
+				jsonError(w, http.StatusBadRequest, "spec.to and spec.body are required")
+				return
+			}
+			if body.Spec.To == from {
+				jsonError(w, http.StatusBadRequest, "refusing self-addressed message")
+				return
+			}
+			ns := defaultNamespace(namespace)
+			receiver, err := getPeerAgent(ctx, k8s, ns, body.Spec.To)
+			if err != nil {
+				jsonError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			if !receiver.PeerEnabled() {
+				jsonError(w, http.StatusBadRequest, fmt.Sprintf("peer messaging disabled on receiver %q", body.Spec.To))
+				return
+			}
+			name := strings.TrimSpace(body.Name)
+			if name == "" {
+				name = fmt.Sprintf("msg-%s-%s-%d", from, body.Spec.To, time.Now().UnixNano())
+			}
+			spec := body.Spec
+			spec.From = from
+			obj := &v1alpha1.Message{
+				TypeMeta:   metav1.TypeMeta{APIVersion: v1alpha1.GroupVersion.String(), Kind: "Message"},
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+				Spec:       spec,
+			}
+			if err := k8s.Create(ctx, obj); err != nil {
+				jsonError(w, http.StatusConflict, err.Error())
+				return
+			}
+			vmetrics.MessagesTotal.WithLabelValues(from, body.Spec.To, "Pending").Inc()
+			jsonOK(w, obj)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/api/messages/", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		name := strings.TrimPrefix(r.URL.Path, "/api/messages/")
+		if name == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		ns := defaultNamespace(namespace)
+		switch r.Method {
+		case http.MethodGet:
+			var obj v1alpha1.Message
+			if err := k8s.Get(ctx, client.ObjectKey{Name: name, Namespace: ns}, &obj); err != nil {
+				jsonError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			jsonOK(w, obj)
+		case http.MethodDelete:
+			obj := &v1alpha1.Message{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
 			if err := k8s.Delete(ctx, obj); err != nil {
 				jsonError(w, http.StatusNotFound, err.Error())
 				return
@@ -451,6 +565,29 @@ func defaultNamespace(namespace string) string {
 		return namespace
 	}
 	return "default"
+}
+
+// getPeerAgent fetches an Agent and returns a clear error when missing /
+// disabled / not ready. Used by POST /api/messages to validate the
+// receiver before creating a Message CRD.
+func getPeerAgent(ctx context.Context, k8s client.Client, namespace, name string) (*v1alpha1.Agent, error) {
+	if strings.TrimSpace(name) == "" {
+		return nil, errors.New("spec.to is required")
+	}
+	var agent v1alpha1.Agent
+	if err := k8s.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, &agent); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, fmt.Errorf("agent %q not found", name)
+		}
+		return nil, err
+	}
+	if !agent.Spec.Enabled {
+		return nil, fmt.Errorf("agent %q is disabled", name)
+	}
+	if !agent.Status.Ready {
+		return nil, fmt.Errorf("agent %q is not ready", name)
+	}
+	return &agent, nil
 }
 
 func validateAgentExists(ctx context.Context, k8s client.Client, namespace, name string) error {

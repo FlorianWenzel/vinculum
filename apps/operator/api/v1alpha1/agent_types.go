@@ -47,6 +47,12 @@ type AgentSpec struct {
 	// (VINCULUM_OPERATOR_URL) so the agent can dispatch Tasks to peer Agents via
 	// the vinculum MCP server.
 	Orchestrator bool `json:"orchestrator,omitempty"`
+	// Peer toggles peer-to-peer messaging on this Agent. When enabled (the
+	// default), the bundled vinculum MCP server exposes send_message /
+	// list_peers / get_message to the agent's LLM, and the operator routes
+	// inbound Messages to this pod. Set to false to opt out of the
+	// Message API entirely. Nil is treated as true; use PeerEnabled().
+	Peer *bool `json:"peer,omitempty"`
 	// AllowedTools lists crush tool names that don't require a permission
 	// prompt. Renders to crush's permissions.allowed_tools. Default when
 	// unset: ["*"] — non-interactive `crush run` would block otherwise.
@@ -158,8 +164,21 @@ func (in *Agent) DeepCopyInto(out *Agent) {
 	in.Status.DeepCopyInto(&out.Status)
 }
 
+// PeerEnabled reports whether this Agent participates in peer-to-peer
+// messaging. Defaults to true when spec.peer is unset.
+func (a *Agent) PeerEnabled() bool {
+	if a == nil || a.Spec.Peer == nil {
+		return true
+	}
+	return *a.Spec.Peer
+}
+
 func (in *AgentSpec) DeepCopyInto(out *AgentSpec) {
 	*out = *in
+	if in.Peer != nil {
+		v := *in.Peer
+		out.Peer = &v
+	}
 	if in.ProviderSecretRef != nil {
 		out.ProviderSecretRef = &SecretRef{Name: in.ProviderSecretRef.Name}
 	}

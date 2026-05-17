@@ -94,6 +94,76 @@ vnclm get mcp                       # NAME | TYPE | TARGET | SECRET | ENABLED | 
 
 Manifest form: [`.local/mcp-filesystem.yaml`](.local/mcp-filesystem.yaml), [`.local/mcp-github.yaml`](.local/mcp-github.yaml), [`.local/agent-with-mcp.yaml`](.local/agent-with-mcp.yaml).
 
+## Peer messaging
+
+Every Agent is a peer by default (`spec.peer: true`) and gets the bundled
+vinculum MCP server wired into its crush session. That MCP exposes three
+async tools — `send_message`, `list_peers`, `get_message` — so any drone
+can chat with any other drone in the namespace without being an
+orchestrator. Conversations are first-class K8s resources: `kubectl get
+messages` lists every back-and-forth, and replies thread via
+`spec.inReplyTo` / `status.replyMessages`.
+
+```mermaid
+flowchart LR
+    dev["dev-7"]
+    qa["qa-3"]
+    op["Operator API<br/>:8084"]
+
+    dev -- "send_message(to=qa-3, body='review PR #42')" --> op
+    op -- "creates Message → POST /message" --> qa
+    qa -- "send_message(to=dev-7, inReplyTo=msg-1, body='LGTM but tests fail')" --> op
+    op -- "creates reply Message → POST /message" --> dev
+```
+
+Async-only: `send_message` returns immediately. A reply, if any, arrives
+later as a fresh inbound Message that fires a new crush turn on the
+sender — there is no synchronous `await_reply`. If a drone needs to
+chase a non-response it just sends a follow-up.
+
+Minimal setup — two peer drones (the `peer: true` is implicit):
+
+```yaml
+apiVersion: vinculum.dev/v1alpha1
+kind: Agent
+metadata: { name: dev-7, namespace: vinculum-system }
+spec:
+  model: openrouter/anthropic/claude-sonnet-4.6
+  providerSecretRef: { name: openrouter-provider-keys }
+  instructionInline:
+    fileName: AGENTS.md
+    content: |
+      You are dev-7. Inbound peer chatter arrives wrapped in
+      [peer-message from=<name> ...] ... [/peer-message] markers. When
+      another drone asks you a question, answer it with send_message
+      and pass their original message name as inReplyTo so the thread
+      is browsable.
+---
+apiVersion: vinculum.dev/v1alpha1
+kind: Agent
+metadata: { name: qa-3, namespace: vinculum-system }
+spec:
+  model: openrouter/anthropic/claude-haiku-4.5
+  providerSecretRef: { name: openrouter-provider-keys }
+```
+
+```bash
+vnclm ctx set-agent dev-7
+vnclm run "Ask qa-3 to review PR #42, then end your turn."
+kubectl get messages -n vinculum-system           # both directions visible
+```
+
+To opt an Agent out of peer messaging entirely, set `spec.peer: false`.
+The operator then skips the env injection and the receiver rejects
+`POST /api/messages` with a clear "peer messaging disabled" error.
+
+**Tasks vs. Messages.** A Task is sync RPC — "do this work and report
+back" — and is what `vnclm run` produces. A Message is async chat — "I'm
+just talking to you" — and is what `send_message` produces. A drone
+receiving a Message can absolutely dispatch follow-up Tasks (e.g. open
+a GitHub issue, run tests). They share the same per-pod crush session,
+so a drone has one mental thread the way a teammate on Slack does.
+
 ## Orchestrator agents
 
 Set `spec.orchestrator: true` on an Agent and it gains the ability to drive other Agents. The bundled `vnclm-mcp` stdio server (already on the agent image) talks to the operator's in-cluster API and exposes six tools to the running crush session:
@@ -301,7 +371,7 @@ Full example: [`.local/webhook-trigger.yaml`](.local/webhook-trigger.yaml).
 
 ```bash
 helm install vinculum oci://ghcr.io/florianwenzel/helm/vinculum \
-  --version 0.5.3 \
+  --version 0.6.0 \
   -n vinculum-system --create-namespace
 ```
 
@@ -319,7 +389,7 @@ brew install FlorianWenzel/vinculum/vnclm
 **Prebuilt binary** (macOS / Linux / Windows — amd64 / arm64):
 
 ```bash
-VERSION=v0.5.3
+VERSION=v0.6.0
 OS=darwin      # linux | darwin | windows
 ARCH=arm64     # amd64 | arm64
 curl -L -o vnclm \

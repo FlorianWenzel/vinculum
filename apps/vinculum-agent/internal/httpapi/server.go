@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -29,7 +30,66 @@ func (s *Server) Mux() *http.ServeMux {
 	mux.HandleFunc("/task/", s.taskByName)
 	mux.HandleFunc("/tasks", s.listTasks)
 	mux.HandleFunc("/tasks/", s.taskByName)
+	mux.HandleFunc("/message", s.postMessage)
 	return mux
+}
+
+// inboundMessage is the payload the operator's MessageReconciler POSTs to
+// each agent pod's /message endpoint. The body is wrapped in a stable
+// [peer-message ...] marker before being fed into the crush session, so
+// per-agent AGENTS.md instructions can teach the LLM to recognize peer
+// chatter vs. a fresh human Task.
+type inboundMessage struct {
+	MessageID string `json:"messageId"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	From      string `json:"from"`
+	Body      string `json:"body"`
+	InReplyTo string `json:"inReplyTo,omitempty"`
+}
+
+func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var in inboundMessage
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if strings.TrimSpace(in.Name) == "" || strings.TrimSpace(in.Body) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name and body are required"})
+		return
+	}
+	payload := tasks.DispatchPayload{
+		TaskID:    in.MessageID,
+		Name:      in.Name,
+		Namespace: in.Namespace,
+		Kind:      tasks.KindMessage,
+		Spec: tasks.TaskSpec{
+			AgentRef: s.cfg.AgentName,
+			Prompt:   wrapPeerMessage(in),
+		},
+	}
+	if _, err := s.runner.Enqueue(payload); err != nil {
+		if errors.Is(err, tasks.ErrAlreadyExists) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued", "message": in.Name})
+}
+
+func wrapPeerMessage(in inboundMessage) string {
+	header := fmt.Sprintf("[peer-message from=%s name=%s", in.From, in.Name)
+	if in.InReplyTo != "" {
+		header += " inReplyTo=" + in.InReplyTo
+	}
+	header += "]"
+	return header + "\n" + in.Body + "\n[/peer-message]"
 }
 
 func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {

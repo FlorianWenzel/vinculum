@@ -52,6 +52,17 @@ var (
 		},
 		[]string{"from", "to"},
 	)
+
+	// MessagesTotal counts Message lifecycle events (creation and terminal
+	// transitions) so peer chatter is observable in Prometheus alongside
+	// Task metrics.
+	MessagesTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "vinculum_messages_total",
+			Help: "Peer Message phase transitions, labeled by sender (from), receiver (to), and phase.",
+		},
+		[]string{"from", "to", "phase"},
+	)
 )
 
 // Register registers all vinculum metrics on the controller-runtime
@@ -62,6 +73,7 @@ func Register() {
 		TaskDurationSeconds,
 		AgentReady,
 		OrchestratorDispatchesTotal,
+		MessagesTotal,
 	} {
 		// MustRegister panics on AlreadyRegisteredError; use Register so a
 		// second call (e.g. controller restart in tests) is a no-op.

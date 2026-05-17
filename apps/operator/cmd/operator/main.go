@@ -63,6 +63,7 @@ func main() {
 		Cfg:    controllers.AgentReconcilerConfig{AgentDefaultImage: cfg.AgentDefaultImage, OperatorURL: cfg.OperatorURL},
 	}
 	taskReconciler := &controllers.TaskReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}
+	messageReconciler := &controllers.MessageReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}
 	scheduleReconciler := &controllers.AgentScheduleReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
@@ -74,14 +75,14 @@ func main() {
 
 	go startAPIServer(mgr.GetClient(), watchNamespace, cfg)
 	ctrl.Log.Info("vinculum-operator manager configured", "watchNamespace", watchNamespace)
-	go startPoller(mgr.GetClient(), watchNamespace, agentReconciler, taskReconciler, scheduleReconciler)
+	go startPoller(mgr.GetClient(), watchNamespace, agentReconciler, taskReconciler, messageReconciler, scheduleReconciler)
 
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		os.Exit(1)
 	}
 }
 
-func startPoller(k8s client.Client, namespace string, agent *controllers.AgentReconciler, task *controllers.TaskReconciler, schedule *controllers.AgentScheduleReconciler) {
+func startPoller(k8s client.Client, namespace string, agent *controllers.AgentReconciler, task *controllers.TaskReconciler, message *controllers.MessageReconciler, schedule *controllers.AgentScheduleReconciler) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
@@ -100,6 +101,12 @@ func startPoller(k8s client.Client, namespace string, agent *controllers.AgentRe
 		if err := k8s.List(ctx, &taskList, listOpts...); err == nil {
 			for _, item := range taskList.Items {
 				_, _ = task.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&item)})
+			}
+		}
+		var messageList v1alpha1.MessageList
+		if err := k8s.List(ctx, &messageList, listOpts...); err == nil {
+			for _, item := range messageList.Items {
+				_, _ = message.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&item)})
 			}
 		}
 		var schedules v1alpha1.AgentScheduleList

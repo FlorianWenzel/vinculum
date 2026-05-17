@@ -8,7 +8,16 @@ type DispatchPayload struct {
 	Name      string   `json:"name"`
 	Namespace string   `json:"namespace"`
 	Spec      TaskSpec `json:"spec"`
+	// Kind tags the work item's source resource. Empty or "task" routes
+	// status patches to the Task CRD; "message" tells the runner not to
+	// patch (Message lifecycle is owned by the operator's reconciler).
+	Kind string `json:"kind,omitempty"`
 }
+
+const (
+	KindTask    = "task"
+	KindMessage = "message"
+)
 
 type TaskSpec struct {
 	AgentRef       string            `json:"agentRef"`

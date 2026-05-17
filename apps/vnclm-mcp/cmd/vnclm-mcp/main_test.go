@@ -90,8 +90,21 @@ func (s *stubOperator) handler(t *testing.T) http.HandlerFunc {
 // → test), and a cleanup func.
 func driveServer(t *testing.T, op *opclient.Client, selfName string, fetchLogs peerLogFetcher) (io.Writer, *bufio.Scanner, func()) {
 	t.Helper()
+	return driveServerWith(t, op, selfName, true, true, fetchLogs)
+}
+
+// driveServerWith lets a test enable just the peer surface, just the
+// orchestrator surface, or both — covering the gating that real pods do
+// via VINCULUM_PEER / VINCULUM_ORCHESTRATOR env vars.
+func driveServerWith(t *testing.T, op *opclient.Client, selfName string, peer, orchestrator bool, fetchLogs peerLogFetcher) (io.Writer, *bufio.Scanner, func()) {
+	t.Helper()
 	srv := mcp.NewServer("vinculum", "test")
-	registerTools(srv, op, selfName, "vinculum", fetchLogs)
+	if orchestrator {
+		registerOrchestratorTools(srv, op, selfName, "vinculum", fetchLogs)
+	}
+	if peer {
+		registerPeerTools(srv, op, selfName)
+	}
 
 	clientToServer, serverIn := io.Pipe()
 	serverOut, fromServer := io.Pipe()
@@ -173,15 +186,19 @@ func TestMCPHandshakeAndListAgents(t *testing.T) {
 	list := rpcCall(t, w, sc, 2, "tools/list", nil)
 	res, _ := list["result"].(map[string]any)
 	tools, _ := res["tools"].([]any)
-	if len(tools) != 6 {
-		t.Errorf("want 6 tools, got %d", len(tools))
+	// 6 orchestrator tools + 3 peer tools = 9 when both are enabled.
+	if len(tools) != 9 {
+		t.Errorf("want 9 tools, got %d", len(tools))
 	}
 	names := map[string]bool{}
 	for _, tt := range tools {
 		m := tt.(map[string]any)
 		names[m["name"].(string)] = true
 	}
-	for _, want := range []string{"list_agents", "dispatch_task", "get_task", "wait_task", "get_task_logs", "cancel_task"} {
+	for _, want := range []string{
+		"list_agents", "dispatch_task", "get_task", "wait_task", "get_task_logs", "cancel_task",
+		"send_message", "list_peers", "get_message",
+	} {
 		if !names[want] {
 			t.Errorf("missing tool %q", want)
 		}
@@ -306,6 +323,127 @@ func TestGetTaskLogs(t *testing.T) {
 	}
 	if !strings.Contains(text, "log line one") || !strings.Contains(text, "drone-7/task-haiku") {
 		t.Errorf("unexpected log output: %s", text)
+	}
+}
+
+func TestSendMessage(t *testing.T) {
+	var captured map[string]any
+	var capturedHeader string
+	opSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/messages":
+			capturedHeader = r.Header.Get("X-Vinculum-From-Agent")
+			_ = json.NewDecoder(r.Body).Decode(&captured)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"metadata": map[string]any{"name": "msg-1", "namespace": "vinculum"},
+				"spec":     map[string]any{"to": "drone-7", "from": "locutus", "body": "hi"},
+				"status":   map[string]any{"phase": "Pending"},
+			})
+		default:
+			http.Error(w, "not used", http.StatusNotFound)
+		}
+	}))
+	defer opSrv.Close()
+
+	w, sc, cleanup := driveServer(t, opclient.New(opSrv.URL).WithFromAgent("locutus"), "locutus", nil)
+	defer cleanup()
+
+	rpcCall(t, w, sc, 1, "initialize", map[string]any{})
+	resp := rpcCall(t, w, sc, 2, "tools/call", map[string]any{
+		"name":      "send_message",
+		"arguments": map[string]any{"to": "drone-7", "body": "hi", "name": "msg-1"},
+	})
+	text, isErr := extractText(t, resp)
+	if isErr {
+		t.Fatalf("send_message errored: %s", text)
+	}
+	if !strings.Contains(text, "drone-7") {
+		t.Errorf("response missing recipient: %s", text)
+	}
+	if capturedHeader != "locutus" {
+		t.Errorf("X-Vinculum-From-Agent not set: %q", capturedHeader)
+	}
+	spec, _ := captured["spec"].(map[string]any)
+	if spec["to"] != "drone-7" || spec["body"] != "hi" {
+		t.Errorf("payload mismatch: %+v", spec)
+	}
+}
+
+func TestSendMessage_SelfGuard(t *testing.T) {
+	opSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("operator should not be hit: %s %s", r.Method, r.URL.Path)
+		http.Error(w, "should not be called", http.StatusBadRequest)
+	}))
+	defer opSrv.Close()
+
+	w, sc, cleanup := driveServer(t, opclient.New(opSrv.URL), "locutus", nil)
+	defer cleanup()
+
+	rpcCall(t, w, sc, 1, "initialize", map[string]any{})
+	resp := rpcCall(t, w, sc, 2, "tools/call", map[string]any{
+		"name":      "send_message",
+		"arguments": map[string]any{"to": "locutus", "body": "hello me"},
+	})
+	text, isErr := extractText(t, resp)
+	if !isErr {
+		t.Fatalf("expected error, got success: %s", text)
+	}
+	if !strings.Contains(text, "self") {
+		t.Errorf("error should mention self: %s", text)
+	}
+}
+
+func TestPeerOnlyGating(t *testing.T) {
+	opSrv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
+	defer opSrv.Close()
+
+	w, sc, cleanup := driveServerWith(t, opclient.New(opSrv.URL), "locutus", true, false, nil)
+	defer cleanup()
+
+	rpcCall(t, w, sc, 1, "initialize", map[string]any{})
+	list := rpcCall(t, w, sc, 2, "tools/list", nil)
+	res := list["result"].(map[string]any)
+	tools := res["tools"].([]any)
+	names := map[string]bool{}
+	for _, tt := range tools {
+		names[tt.(map[string]any)["name"].(string)] = true
+	}
+	for _, want := range []string{"send_message", "list_peers", "get_message"} {
+		if !names[want] {
+			t.Errorf("peer-only mode missing %q", want)
+		}
+	}
+	for _, bad := range []string{"dispatch_task", "wait_task", "list_agents", "get_task", "get_task_logs", "cancel_task"} {
+		if names[bad] {
+			t.Errorf("peer-only mode should not expose %q", bad)
+		}
+	}
+}
+
+func TestOrchestratorOnlyGating(t *testing.T) {
+	opSrv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
+	defer opSrv.Close()
+
+	w, sc, cleanup := driveServerWith(t, opclient.New(opSrv.URL), "locutus", false, true, nil)
+	defer cleanup()
+
+	rpcCall(t, w, sc, 1, "initialize", map[string]any{})
+	list := rpcCall(t, w, sc, 2, "tools/list", nil)
+	res := list["result"].(map[string]any)
+	tools := res["tools"].([]any)
+	names := map[string]bool{}
+	for _, tt := range tools {
+		names[tt.(map[string]any)["name"].(string)] = true
+	}
+	for _, want := range []string{"dispatch_task", "wait_task", "list_agents", "get_task", "get_task_logs", "cancel_task"} {
+		if !names[want] {
+			t.Errorf("orchestrator-only mode missing %q", want)
+		}
+	}
+	for _, bad := range []string{"send_message", "list_peers", "get_message"} {
+		if names[bad] {
+			t.Errorf("orchestrator-only mode should not expose %q", bad)
+		}
 	}
 }
 

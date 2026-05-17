@@ -253,6 +253,12 @@ func (r *Runner) patchStatus(state *State, status map[string]any) {
 	if r.kube == nil {
 		return
 	}
+	// Messages don't carry the same status shape as Tasks (no stdoutTail,
+	// no exit code on the CRD). Their lifecycle is owned by the operator's
+	// MessageReconciler; the agent just runs the crush turn.
+	if state.Payload.Kind == KindMessage {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := r.kube.PatchStatus(ctx, state.Payload.Name, status); err != nil {

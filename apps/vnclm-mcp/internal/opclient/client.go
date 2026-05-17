@@ -37,12 +37,14 @@ func (c *Client) WithFromAgent(name string) *Client {
 // agent typically wants. The full object is returned as JSON; this shape
 // keeps tool output compact.
 type Agent struct {
-	Name         string `json:"name"`
-	Namespace    string `json:"namespace"`
-	Model        string `json:"model,omitempty"`
-	Phase        string `json:"phase,omitempty"`
-	Ready        bool   `json:"ready,omitempty"`
-	Orchestrator bool   `json:"orchestrator,omitempty"`
+	Name         string            `json:"name"`
+	Namespace    string            `json:"namespace"`
+	Model        string            `json:"model,omitempty"`
+	Phase        string            `json:"phase,omitempty"`
+	Ready        bool              `json:"ready,omitempty"`
+	Orchestrator bool              `json:"orchestrator,omitempty"`
+	Peer         bool              `json:"peer,omitempty"`
+	Labels       map[string]string `json:"labels,omitempty"`
 }
 
 // Task is a partial mirror of v1alpha1.Task.
@@ -64,12 +66,17 @@ type Task struct {
 // fields without pulling in apimachinery.
 type rawAgent struct {
 	Metadata struct {
-		Name      string `json:"name"`
-		Namespace string `json:"namespace"`
+		Name      string            `json:"name"`
+		Namespace string            `json:"namespace"`
+		Labels    map[string]string `json:"labels"`
 	} `json:"metadata"`
 	Spec struct {
 		Model        string `json:"model"`
 		Orchestrator bool   `json:"orchestrator"`
+		// Peer is *bool in the CRD; absent or null means default-on. We
+		// model it as a pointer so we can distinguish unset (→ true) from
+		// explicit false.
+		Peer *bool `json:"peer"`
 	} `json:"spec"`
 	Status struct {
 		Phase string `json:"phase"`
@@ -78,6 +85,10 @@ type rawAgent struct {
 }
 
 func (r rawAgent) toAgent() Agent {
+	peer := true
+	if r.Spec.Peer != nil {
+		peer = *r.Spec.Peer
+	}
 	return Agent{
 		Name:         r.Metadata.Name,
 		Namespace:    r.Metadata.Namespace,
@@ -85,6 +96,60 @@ func (r rawAgent) toAgent() Agent {
 		Phase:        r.Status.Phase,
 		Ready:        r.Status.Ready,
 		Orchestrator: r.Spec.Orchestrator,
+		Peer:         peer,
+		Labels:       r.Metadata.Labels,
+	}
+}
+
+// Message is a partial mirror of v1alpha1.Message returned to the MCP
+// caller. The reply chain is discoverable via ReplyMessages plus a
+// follow-up get_message call.
+type Message struct {
+	Name          string   `json:"name"`
+	Namespace     string   `json:"namespace"`
+	From          string   `json:"from"`
+	To            string   `json:"to"`
+	Body          string   `json:"body"`
+	InReplyTo     string   `json:"inReplyTo,omitempty"`
+	Phase         string   `json:"phase,omitempty"`
+	Reason        string   `json:"reason,omitempty"`
+	DeliveredAt   string   `json:"deliveredAt,omitempty"`
+	ReplyMessages []string `json:"replyMessages,omitempty"`
+}
+
+type rawMessage struct {
+	Metadata struct {
+		Name      string `json:"name"`
+		Namespace string `json:"namespace"`
+	} `json:"metadata"`
+	Spec struct {
+		To             string `json:"to"`
+		From           string `json:"from"`
+		Body           string `json:"body"`
+		InReplyTo      string `json:"inReplyTo"`
+		TimeoutSeconds int32  `json:"timeoutSeconds"`
+	} `json:"spec"`
+	Status struct {
+		Phase         string   `json:"phase"`
+		Reason        string   `json:"reason"`
+		Message       string   `json:"message"`
+		DeliveredAt   string   `json:"deliveredAt"`
+		ReplyMessages []string `json:"replyMessages"`
+	} `json:"status"`
+}
+
+func (r rawMessage) toMessage() Message {
+	return Message{
+		Name:          r.Metadata.Name,
+		Namespace:     r.Metadata.Namespace,
+		From:          r.Spec.From,
+		To:            r.Spec.To,
+		Body:          r.Spec.Body,
+		InReplyTo:     r.Spec.InReplyTo,
+		Phase:         r.Status.Phase,
+		Reason:        r.Status.Reason,
+		DeliveredAt:   r.Status.DeliveredAt,
+		ReplyMessages: r.Status.ReplyMessages,
 	}
 }
 
@@ -194,6 +259,47 @@ func (c *Client) GetTask(ctx context.Context, name string) (*Task, error) {
 
 func (c *Client) DeleteTask(ctx context.Context, name string) error {
 	return c.delete(ctx, "/api/tasks/"+name)
+}
+
+// SendMessageInput is the body for POST /api/messages.
+type SendMessageInput struct {
+	Name           string
+	To             string
+	Body           string
+	InReplyTo      string
+	TimeoutSeconds int32
+}
+
+func (c *Client) SendMessage(ctx context.Context, in SendMessageInput) (*Message, error) {
+	spec := map[string]any{
+		"to":   in.To,
+		"body": in.Body,
+	}
+	if in.InReplyTo != "" {
+		spec["inReplyTo"] = in.InReplyTo
+	}
+	if in.TimeoutSeconds > 0 {
+		spec["timeoutSeconds"] = in.TimeoutSeconds
+	}
+	body := map[string]any{"spec": spec}
+	if in.Name != "" {
+		body["name"] = in.Name
+	}
+	var r rawMessage
+	if err := c.post(ctx, "/api/messages", body, &r); err != nil {
+		return nil, err
+	}
+	m := r.toMessage()
+	return &m, nil
+}
+
+func (c *Client) GetMessage(ctx context.Context, name string) (*Message, error) {
+	var r rawMessage
+	if err := c.get(ctx, "/api/messages/"+name, &r); err != nil {
+		return nil, err
+	}
+	m := r.toMessage()
+	return &m, nil
 }
 
 // WaitTask polls GetTask until the phase is terminal (Succeeded/Failed/TimedOut)

@@ -9,6 +9,32 @@ Release artifacts and one-line summaries also live on the
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-05-17
+
+### Added
+- **Peer-to-peer messaging.** New `Message` CRD makes drone-to-drone
+  chatter a first-class resource. Each Agent now has `spec.peer: true`
+  by default, gaining three new MCP tools — `send_message`,
+  `list_peers`, `get_message` — alongside the existing orchestrator
+  surface. Messages are async: `send_message` returns immediately, and
+  replies arrive as fresh inbound Messages with `inReplyTo`, firing a
+  new crush turn on the original sender (no `await_reply`). Threads
+  are browsable via `kubectl get messages` and `status.replyMessages`.
+- **Orchestrator vs. peer split.** `vnclm-mcp` now registers tools by
+  capability — `VINCULUM_PEER` (default-on) exposes the chat surface,
+  `VINCULUM_ORCHESTRATOR` exposes `dispatch_task` and friends. A drone
+  can be neither, peer-only, orchestrator-only, or both. Existing
+  orchestrator agents keep working unchanged.
+- **`vinculum_messages_total{from,to,phase}` metric** on the operator
+  next to the existing task/dispatch counters.
+
+### Changed
+- `Agent.spec.peer` defaults to true: every Agent gets the bundled
+  vinculum MCP wired into its crush session out of the box. Set
+  `peer: false` to opt out.
+
+[Release notes](https://github.com/FlorianWenzel/vinculum/releases/tag/v0.6.0)
+
 ## [0.5.3] — 2026-05-17
 
 ### Fixed

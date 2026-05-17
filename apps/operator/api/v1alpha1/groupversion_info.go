@@ -18,6 +18,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&AgentList{},
 		&Task{},
 		&TaskList{},
+		&Message{},
+		&MessageList{},
 		&AgentSchedule{},
 		&AgentScheduleList{},
 		&MCPServer{},

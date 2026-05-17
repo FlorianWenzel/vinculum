@@ -81,6 +81,7 @@ spec:
                 workspaceSize: {type: string}
                 workspaceStorageClass: {type: string}
                 orchestrator: {type: boolean}
+                peer: {type: boolean}
                 allowedTools:
                   type: array
                   items: {type: string}

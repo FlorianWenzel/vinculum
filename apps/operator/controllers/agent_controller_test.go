@@ -63,22 +63,57 @@ func findEnv(envs []corev1.EnvVar, name string) (string, bool) {
 	return "", false
 }
 
-// TestOrchestratorEnvInjected verifies that flipping spec.orchestrator to true
-// causes the agent Deployment to gain VINCULUM_OPERATOR_URL, and that
-// non-orchestrator agents do not get the var.
-func TestOrchestratorEnvInjected(t *testing.T) {
+// TestPeerOrchestratorEnvInjected verifies that VINCULUM_OPERATOR_URL is
+// injected whenever the Agent is peer-enabled (the default) or orchestrator-
+// enabled, and that VINCULUM_PEER / VINCULUM_ORCHESTRATOR reflect the spec.
+func TestPeerOrchestratorEnvInjected(t *testing.T) {
 	scheme := newScheme(t)
 
+	boolPtr := func(b bool) *bool { return &b }
 	cases := []struct {
-		name         string
-		orchestrator bool
-		operatorURL  string
-		wantPresent  bool
-		wantValue    string
+		name             string
+		peer             *bool // nil → default true
+		orchestrator     bool
+		operatorURL      string
+		wantURL          bool
+		wantURLValue     string
+		wantPeer         string
+		wantOrchestrator string
 	}{
-		{name: "non-orchestrator-omits-url", orchestrator: false, operatorURL: "http://vinculum-operator:8084", wantPresent: false},
-		{name: "orchestrator-injects-url", orchestrator: true, operatorURL: "http://vinculum-operator.vinculum.svc:8084", wantPresent: true, wantValue: "http://vinculum-operator.vinculum.svc:8084"},
-		{name: "orchestrator-empty-url-skips", orchestrator: true, operatorURL: "", wantPresent: false},
+		{
+			name:             "default-peer-on-injects-url",
+			peer:             nil,
+			orchestrator:     false,
+			operatorURL:      "http://vinculum-operator:8084",
+			wantURL:          true,
+			wantURLValue:     "http://vinculum-operator:8084",
+			wantPeer:         "true",
+			wantOrchestrator: "false",
+		},
+		{
+			name:             "peer-explicitly-off-orchestrator-off-omits-url",
+			peer:             boolPtr(false),
+			orchestrator:     false,
+			operatorURL:      "http://vinculum-operator:8084",
+			wantURL:          false,
+		},
+		{
+			name:             "peer-off-orchestrator-on-still-injects",
+			peer:             boolPtr(false),
+			orchestrator:     true,
+			operatorURL:      "http://vinculum-operator.vinculum.svc:8084",
+			wantURL:          true,
+			wantURLValue:     "http://vinculum-operator.vinculum.svc:8084",
+			wantPeer:         "false",
+			wantOrchestrator: "true",
+		},
+		{
+			name:             "orchestrator-empty-url-skips",
+			peer:             boolPtr(false),
+			orchestrator:     true,
+			operatorURL:      "",
+			wantURL:          false,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -89,6 +124,7 @@ func TestOrchestratorEnvInjected(t *testing.T) {
 				Image:        "ghcr.io/florianwenzel/vinculum-agent:test",
 				Enabled:      true,
 				Orchestrator: tc.orchestrator,
+				Peer:         tc.peer,
 			}
 
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(agent).Build()
@@ -114,8 +150,6 @@ func TestOrchestratorEnvInjected(t *testing.T) {
 				t.Fatalf("want 1 container, got %d", len(containers))
 			}
 
-			// AGENT_NAME and AGENT_NAMESPACE should always be set; the MCP
-			// server depends on them at runtime.
 			if v, ok := findEnv(containers[0].Env, "AGENT_NAME"); !ok || v != "locutus" {
 				t.Errorf("AGENT_NAME wrong: %q present=%v", v, ok)
 			}
@@ -124,11 +158,19 @@ func TestOrchestratorEnvInjected(t *testing.T) {
 			}
 
 			got, present := findEnv(containers[0].Env, "VINCULUM_OPERATOR_URL")
-			if present != tc.wantPresent {
-				t.Errorf("VINCULUM_OPERATOR_URL present=%v, want %v", present, tc.wantPresent)
+			if present != tc.wantURL {
+				t.Errorf("VINCULUM_OPERATOR_URL present=%v, want %v", present, tc.wantURL)
 			}
-			if present && got != tc.wantValue {
-				t.Errorf("VINCULUM_OPERATOR_URL=%q, want %q", got, tc.wantValue)
+			if present && got != tc.wantURLValue {
+				t.Errorf("VINCULUM_OPERATOR_URL=%q, want %q", got, tc.wantURLValue)
+			}
+			if tc.wantURL {
+				if v, ok := findEnv(containers[0].Env, "VINCULUM_PEER"); !ok || v != tc.wantPeer {
+					t.Errorf("VINCULUM_PEER=%q ok=%v, want %q", v, ok, tc.wantPeer)
+				}
+				if v, ok := findEnv(containers[0].Env, "VINCULUM_ORCHESTRATOR"); !ok || v != tc.wantOrchestrator {
+					t.Errorf("VINCULUM_ORCHESTRATOR=%q ok=%v, want %q", v, ok, tc.wantOrchestrator)
+				}
 			}
 		})
 	}

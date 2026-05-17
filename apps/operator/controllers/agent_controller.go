@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -287,12 +288,12 @@ func (r *AgentReconciler) ensureRole(ctx context.Context, agent *v1alpha1.Agent,
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"vinculum.dev"},
-				Resources: []string{"tasks"},
+				Resources: []string{"tasks", "messages"},
 				Verbs:     []string{"get", "list", "watch", "update", "patch"},
 			},
 			{
 				APIGroups: []string{"vinculum.dev"},
-				Resources: []string{"tasks/status"},
+				Resources: []string{"tasks/status", "messages/status"},
 				Verbs:     []string{"get", "update", "patch"},
 			},
 		},
@@ -677,8 +678,13 @@ func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.
 	if agent.Spec.InstructionInline != nil && agent.Spec.InstructionInline.FileName != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: "INSTRUCTION_FILE", Value: configMount + "/" + agent.Spec.InstructionInline.FileName})
 	}
-	if agent.Spec.Orchestrator && r.Cfg.OperatorURL != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: "VINCULUM_OPERATOR_URL", Value: r.Cfg.OperatorURL})
+	peerEnabled := agent.PeerEnabled()
+	if (peerEnabled || agent.Spec.Orchestrator) && r.Cfg.OperatorURL != "" {
+		envVars = append(envVars,
+			corev1.EnvVar{Name: "VINCULUM_OPERATOR_URL", Value: r.Cfg.OperatorURL},
+			corev1.EnvVar{Name: "VINCULUM_PEER", Value: strconv.FormatBool(peerEnabled)},
+			corev1.EnvVar{Name: "VINCULUM_ORCHESTRATOR", Value: strconv.FormatBool(agent.Spec.Orchestrator)},
+		)
 	}
 
 	gitInitContainers, gitVolumes, gitMainMounts, gitMainEnv, gitMainEnvFrom := gitPodPieces(agent)
