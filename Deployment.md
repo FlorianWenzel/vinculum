@@ -39,7 +39,7 @@ File: `.github/workflows/publish-images.yaml`
 
 - Runs on pushes to `main` and tag pushes matching `v*`.
 - Builds and pushes two images: operator, agent.
-- Tags: `latest` on default branch, branch name, git tag, `sha-*`, and semver. The `:<appVersion>` (e.g. `:0.5.1`) tag is produced **only by `v*` tag pushes** — main pushes don't claim it, to prevent two builds racing the same tag.
+- Tags: `latest` on default branch, branch name, git tag, `sha-*`, and semver. The `:<appVersion>` (e.g. `:0.5.2`) tag is produced **only by `v*` tag pushes** — main pushes don't claim it, to prevent two builds racing the same tag.
 
 ### 4. CLI publishing
 
@@ -53,7 +53,7 @@ File: `.github/workflows/publish-cli.yaml`
 The chart leaves first-party image tags empty in `helm/vinculum/values.yaml`. Templates fall back to `.Chart.AppVersion`.
 
 Operational meaning:
-- Installing chart version `0.5.1` uses app images tagged `0.5.1` by default.
+- Installing chart version `0.5.2` uses app images tagged `0.5.2` by default.
 - Chart `version` controls the package version.
 - Chart `appVersion` controls the default first-party image tag.
 - Image tags `:<semver>` are produced **only by `v*` tag pushes**. Main pushes
@@ -65,14 +65,14 @@ Operational meaning:
 
 `helm upgrade --install` is idempotent on the chart, but agent pods with
 `spec.image` pinned to a fixed tag (e.g. `:tilt-dev` for local dev, or a
-hardcoded `:0.5.1`) won't auto-track when the chart's appVersion bumps:
+hardcoded `:0.5.2`) won't auto-track when the chart's appVersion bumps:
 
 1. **Recommended** — leave `Agent.spec.image` empty in your manifests so
    the operator falls back to its `AGENT_DEFAULT_IMAGE` env (the chart's
    `defaultAgentImage`). Then `helm upgrade` plus an operator restart
    propagates to every agent's next reconcile.
 2. **Pinned-image** — `kubectl patch agent <name> --type=merge \
-   -p '{"spec":{"image":"ghcr.io/florianwenzel/vinculum-agent:0.5.1"}}'`
+   -p '{"spec":{"image":"ghcr.io/florianwenzel/vinculum-agent:0.5.2"}}'`
    then `kubectl rollout restart deploy/agent-<name>`.
 
 `imagePullPolicy: IfNotPresent` (the chart default) means nodes that
@@ -87,7 +87,7 @@ kubectl set image deploy/vinculum-operator \
 ## Published endpoints
 
 ```bash
-helm install vinculum oci://ghcr.io/florianwenzel/helm/vinculum --version 0.5.1 -n vinculum-system --create-namespace
+helm install vinculum oci://ghcr.io/florianwenzel/helm/vinculum --version 0.5.2 -n vinculum-system --create-namespace
 ```
 
 GHCR namespace:

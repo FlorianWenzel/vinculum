@@ -226,6 +226,28 @@ Defaults: `baseBranch` falls back to the Agent's `repo.branch`; `headBranch` def
 
 Full example: [`.local/agent-coder.yaml`](.local/agent-coder.yaml).
 
+#### LLM-driven GitHub ops via `gh` (v0.5.2)
+
+Beyond the declarative `spec.git` workflow, the agent image bakes in
+GitHub's `gh` CLI so prompts can drive operations the declarative path
+doesn't cover yet — open issues, request reviews, approve PRs, list
+runs, etc. Auth is automatic: `gh` reads `GITHUB_TOKEN` / `GH_TOKEN`
+from env, which the operator already injects when an Agent has
+`gitCredentials.tokenSecretRef` set.
+
+Prompt a drone with e.g.:
+
+```yaml
+prompt: |
+  Open an issue titled "Add /v2/health endpoint" describing the work.
+  Use:  gh issue create --repo acme/api --title "..." --body "..."
+  End your reply with: ISSUE_NUMBER=<n>
+```
+
+Better than hand-rolling `curl`: typed flags, structured output via
+`--json`, automatic pagination. Reach for `gh` first; fall back to
+`curl` if you need something `gh` doesn't expose.
+
 ### Webhook triggers (v0.5)
 
 `WebhookTrigger` turns inbound webhooks into Tasks. GitHub is the only supported source today; the verification is HMAC-SHA256 against the per-trigger Secret.
@@ -279,7 +301,7 @@ Full example: [`.local/webhook-trigger.yaml`](.local/webhook-trigger.yaml).
 
 ```bash
 helm install vinculum oci://ghcr.io/florianwenzel/helm/vinculum \
-  --version 0.5.1 \
+  --version 0.5.2 \
   -n vinculum-system --create-namespace
 ```
 
@@ -297,7 +319,7 @@ brew install FlorianWenzel/vinculum/vnclm
 **Prebuilt binary** (macOS / Linux / Windows — amd64 / arm64):
 
 ```bash
-VERSION=v0.5.1
+VERSION=v0.5.2
 OS=darwin      # linux | darwin | windows
 ARCH=arm64     # amd64 | arm64
 curl -L -o vnclm \

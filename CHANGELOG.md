@@ -9,6 +9,25 @@ Release artifacts and one-line summaries also live on the
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-05-17
+
+### Added
+- **`gh` CLI baked into the agent image.** Pinned to `cli/cli v2.92.0`,
+  installed for both amd64 and arm64 in
+  `apps/vinculum-agent/Dockerfile`. Authentication is automatic when
+  the Agent has `gitCredentials.tokenSecretRef` — `gh` reads
+  `GITHUB_TOKEN` / `GH_TOKEN` from env with no extra config.
+  Prompts should prefer `gh issue create` / `gh pr create` /
+  `gh pr review` over hand-rolled `curl`; the live 3-drone e2e
+  surfaced that LLMs are more reliable at calling typed CLI flags
+  than at constructing signed REST requests by hand.
+
+### Docs
+- New README sub-section "LLM-driven GitHub ops via `gh`" under
+  Coding agents.
+
+[Release notes](https://github.com/FlorianWenzel/vinculum/releases/tag/v0.5.2)
+
 ## [0.5.1] — 2026-05-16
 
 ### Fixed

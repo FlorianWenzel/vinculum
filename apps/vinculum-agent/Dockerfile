@@ -26,6 +26,7 @@ FROM debian:bookworm-slim
 
 ARG TARGETARCH
 ARG CRUSH_VERSION=0.69.1
+ARG GH_VERSION=2.92.0
 
 ENV DEBIAN_FRONTEND=noninteractive \
     WORK_DIR=/workspace \
@@ -51,6 +52,23 @@ RUN set -eux; \
     rm -rf /tmp/crush_*; \
     chmod +x /usr/local/bin/crush; \
     crush --version
+
+# gh CLI — gives coding agents a typed, batteries-included surface for
+# GitHub operations (issues, PRs, reviews) instead of hand-rolling curl.
+# Auth: gh reads GITHUB_TOKEN / GH_TOKEN from env. Both are populated
+# automatically when an Agent has gitCredentials.tokenSecretRef set.
+RUN set -eux; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) gh_arch=amd64 ;; \
+      arm64) gh_arch=arm64 ;; \
+      *) echo "unsupported arch ${TARGETARCH}"; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${gh_arch}.tar.gz" \
+      | tar -xz -C /tmp; \
+    mv "/tmp/gh_${GH_VERSION}_linux_${gh_arch}/bin/gh" /usr/local/bin/gh; \
+    rm -rf /tmp/gh_*; \
+    chmod +x /usr/local/bin/gh; \
+    gh --version
 
 RUN useradd -m -u 10001 -s /bin/bash agent
 
