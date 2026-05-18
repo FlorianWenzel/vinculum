@@ -9,6 +9,29 @@ Release artifacts and one-line summaries also live on the
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-05-18
+
+### Fixed
+- **Crush's silent Sonnet-4 fallback.** The agent image was pinned to
+  `crush v0.69.1`, but the operator's `renderCrushConfig` still emitted
+  the legacy v0.60 schema (top-level `model: "<provider>/<id>"`). v0.69
+  ignored that field and silently routed every request to its embedded
+  default provider — Anthropic Sonnet 4 — burning openrouter credit on
+  a model nobody asked for. The renderer now emits the proper v0.69
+  schema: explicit `providers: { <id>: ProviderConfig }`, `models: {
+  large, small }` slot config, and `options.disable_default_providers:
+  true` so crush refuses to fall back if any future schema drift
+  recurs. Together these form the only path crush has to an LLM —
+  no path = no surprise spend. Supported provider ids today:
+  `openrouter`, `anthropic`, `openai`, `azure` (extensible).
+
+### Added
+- **Recurring orchestrators (PM-bot pattern) section in the README.**
+  Documents the composition of `AgentSchedule` + an `orchestrator:
+  true` Agent that wakes up on a cron and drives the rest of the
+  team — checking in on peers, dispatching follow-up Tasks, and
+  carrying state across ticks via the persistent crush session.
+
 ## [0.6.0] — 2026-05-17
 
 ### Added

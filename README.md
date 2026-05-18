@@ -243,6 +243,50 @@ Full example: [`.local/master-agent.yaml`](.local/master-agent.yaml).
 
 **Note on auth.** Inside the cluster the operator's `:8084` API has no auth; the operator Service URL is reachable from any pod in the namespace. Treat the namespace as the trust boundary. The `orchestrator` flag is the declarative knob — it gates env injection, not network access — so prefer running orchestrators in their own namespace if you need stricter isolation.
 
+### Recurring orchestrators
+
+Combine an orchestrator Agent with an `AgentSchedule` and you get a
+drone that wakes up on a cron and drives the rest of the team — a PM
+bot, a nightly triage sweep, a morning standup summarizer. Because the
+crush session is per-pod and persists across Tasks, each tick inherits
+the prior conversation: the bot already knows what every drone was
+doing last time it looked, so the prompt stays short.
+
+```yaml
+apiVersion: vinculum.dev/v1alpha1
+kind: Agent
+metadata: { name: pm-bot, namespace: vinculum-system }
+spec:
+  orchestrator: true
+  model: openrouter/anthropic/claude-sonnet-4.6
+  providerSecretRef: { name: openrouter-provider-keys }
+  mcpServerRefs: [vinculum]
+  instructionInline:
+    fileName: AGENTS.md
+    content: |
+      You are pm-bot. On each tick: list_agents, then for any idle
+      drone send_message asking what they're working on; for any
+      stuck task, dispatch_task to a reviewer drone. End your turn
+      with a one-paragraph summary of the team's state.
+---
+apiVersion: vinculum.dev/v1alpha1
+kind: AgentSchedule
+metadata: { name: pm-standup, namespace: vinculum-system }
+spec:
+  agentRef: pm-bot
+  schedule: "0 9 * * 1-5"          # 09:00 weekdays
+  concurrencyPolicy: Forbid        # skip tick if previous sweep still running
+  taskTemplate:
+    prompt: "Run the standup sweep."
+```
+
+`concurrencyPolicy: Forbid` is usually what you want — if a sweep
+overruns the next cron tick, skip rather than queue. `Replace` cancels
+the in-flight sweep and starts a fresh one. `Allow` queues; Tasks
+already run serially in-pod so queued ticks won't trample each other,
+but they will pile up if the orchestrator is consistently slower than
+its schedule.
+
 ## Coding agents
 
 Set `spec.repo` on an Agent and the operator adds a `git-clone` init container that hydrates the workspace PVC with your repo on pod start. Set `spec.git` on a Task and the agent wraps each crush run with a branch / commit / push (and optionally a GitHub PR).
@@ -382,7 +426,7 @@ Full example: [`.local/webhook-trigger.yaml`](.local/webhook-trigger.yaml).
 
 ```bash
 helm install vinculum oci://ghcr.io/florianwenzel/helm/vinculum \
-  --version 0.6.0 \
+  --version 0.6.1 \
   -n vinculum-system --create-namespace
 ```
 
@@ -400,7 +444,7 @@ brew install FlorianWenzel/vinculum/vnclm
 **Prebuilt binary** (macOS / Linux / Windows — amd64 / arm64):
 
 ```bash
-VERSION=v0.6.0
+VERSION=v0.6.1
 OS=darwin      # linux | darwin | windows
 ARCH=arm64     # amd64 | arm64
 curl -L -o vnclm \

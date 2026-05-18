@@ -451,7 +451,23 @@ func renderCrushConfig(agent *v1alpha1.Agent, resolved []resolvedMCP) (string, e
 		"$schema": "https://charm.land/crush.json",
 	}
 	if agent.Spec.Model != "" {
-		cfg["model"] = agent.Spec.Model
+		providerID, modelID, ok := splitModelSpec(agent.Spec.Model)
+		if !ok {
+			return "", fmt.Errorf("agent.spec.model %q must be in the form '<provider>/<model-id>' (e.g. 'openrouter/anthropic/claude-haiku-4.5')", agent.Spec.Model)
+		}
+		providerCfg, err := crushProviderConfig(providerID, modelID)
+		if err != nil {
+			return "", err
+		}
+		cfg["providers"] = map[string]any{providerID: providerCfg}
+		selected := map[string]any{"model": modelID, "provider": providerID}
+		// crush v0.69 expects exactly the slot names "large" and "small".
+		// Until vinculum models per-agent sizing, both slots point at the
+		// same model — Agent.spec.model is one knob, not two.
+		cfg["models"] = map[string]any{
+			"large": selected,
+			"small": selected,
+		}
 	}
 	// Default: no permission prompts. Non-interactive `crush run` would
 	// otherwise hang waiting for human approval of each tool use. Users
@@ -461,6 +477,14 @@ func renderCrushConfig(agent *v1alpha1.Agent, resolved []resolvedMCP) (string, e
 		allowed = []string{"*"}
 	}
 	cfg["permissions"] = map[string]any{"allowed_tools": allowed}
+	// Block crush's silent fallback to embedded default providers (Anthropic
+	// Sonnet etc.). With this on, crush only uses providers we explicitly
+	// configure — and fails loudly if the configured one is unavailable
+	// instead of routing to a paid default. See the v0.69 schema:
+	// https://charm.land/crush.json → Options.disable_default_providers.
+	// Pairs with the providers/models blocks above: together they form the
+	// only path crush has to an LLM. No path = no surprise spend.
+	cfg["options"] = map[string]any{"disable_default_providers": true}
 	if len(agent.Spec.DisabledTools) > 0 {
 		tools := map[string]any{}
 		for _, name := range agent.Spec.DisabledTools {
@@ -499,6 +523,78 @@ func renderCrushConfig(agent *v1alpha1.Agent, resolved []resolvedMCP) (string, e
 		return "", err
 	}
 	return string(blob), nil
+}
+
+// splitModelSpec parses Agent.spec.model into (providerID, modelID).
+// The format is "<provider>/<model-id>", where the model id may itself
+// contain slashes (e.g. "openrouter/nvidia/foo:bar"). Returns ok=false if
+// the input has no slash or the provider/model component is empty.
+func splitModelSpec(s string) (provider, model string, ok bool) {
+	i := strings.IndexByte(s, '/')
+	if i <= 0 || i >= len(s)-1 {
+		return "", "", false
+	}
+	return s[:i], s[i+1:], true
+}
+
+// crushProviderConfig returns the v0.69 ProviderConfig for known provider
+// ids. The api_key uses "$VAR" syntax — crush resolves it from the pod env
+// at runtime, which envFrom on the providerSecretRef populates.
+//
+// New providers go here. With disable_default_providers=true crush will
+// not look anywhere else, so an unrecognized provider is a hard error
+// instead of a silent fallback (which is the whole point).
+func crushProviderConfig(providerID, modelID string) (map[string]any, error) {
+	base := map[string]any{
+		"id": providerID,
+		"models": []map[string]any{
+			crushModelEntry(modelID),
+		},
+	}
+	switch providerID {
+	case "openrouter":
+		base["name"] = "OpenRouter"
+		base["type"] = "openai-compat"
+		base["base_url"] = "https://openrouter.ai/api/v1"
+		base["api_key"] = "$OPENROUTER_API_KEY"
+	case "anthropic":
+		base["name"] = "Anthropic"
+		base["type"] = "anthropic"
+		base["base_url"] = "https://api.anthropic.com/v1"
+		base["api_key"] = "$ANTHROPIC_API_KEY"
+	case "openai":
+		base["name"] = "OpenAI"
+		base["type"] = "openai"
+		base["base_url"] = "https://api.openai.com/v1"
+		base["api_key"] = "$OPENAI_API_KEY"
+	case "azure":
+		base["name"] = "Azure OpenAI"
+		base["type"] = "azure"
+		base["base_url"] = "$AZURE_OPENAI_ENDPOINT"
+		base["api_key"] = "$AZURE_OPENAI_API_KEY"
+	default:
+		return nil, fmt.Errorf("unsupported provider %q in agent.spec.model (supported: openrouter, anthropic, openai, azure)", providerID)
+	}
+	return base, nil
+}
+
+// crushModelEntry returns a catwalk.Model record with permissive defaults.
+// We don't track per-token spend here, so cost fields are 0; context and
+// max-tokens are generous defaults that won't gate normal use. These values
+// describe the model to crush — they don't enforce anything at the API.
+func crushModelEntry(id string) map[string]any {
+	return map[string]any{
+		"id":                     id,
+		"name":                   id,
+		"cost_per_1m_in":         0,
+		"cost_per_1m_out":        0,
+		"cost_per_1m_in_cached":  0,
+		"cost_per_1m_out_cached": 0,
+		"context_window":         200000,
+		"default_max_tokens":     8192,
+		"can_reason":             false,
+		"supports_attachments":   false,
+	}
 }
 
 // gitPodPieces returns the Deployment additions needed to clone a repo and
