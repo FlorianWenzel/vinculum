@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -597,6 +598,106 @@ func crushModelEntry(id string) map[string]any {
 	}
 }
 
+// extraMountPieces translates agent.spec.mounts into k8s Volumes +
+// VolumeMounts. Returns an error for malformed entries (missing source,
+// both sources set, empty name/path). When agent has no mounts, returns
+// (nil, nil, nil) and the caller adds nothing.
+//
+// Single-key mounts use Items + SubPath so other keys in the source
+// aren't materialized in the container — the MountPath becomes a single
+// file. Multi-key mounts project the whole Secret/ConfigMap into the
+// directory at MountPath, one file per key (standard k8s behavior).
+func extraMountPieces(agent *v1alpha1.Agent) ([]corev1.Volume, []corev1.VolumeMount, error) {
+	if len(agent.Spec.Mounts) == 0 {
+		return nil, nil, nil
+	}
+	var (
+		volumes []corev1.Volume
+		mounts  []corev1.VolumeMount
+		seen    = map[string]bool{}
+	)
+	for i, m := range agent.Spec.Mounts {
+		if strings.TrimSpace(m.Name) == "" {
+			return nil, nil, fmt.Errorf("mounts[%d]: name is required", i)
+		}
+		if strings.TrimSpace(m.MountPath) == "" {
+			return nil, nil, fmt.Errorf("mounts[%d] (%s): mountPath is required", i, m.Name)
+		}
+		if seen[m.Name] {
+			return nil, nil, fmt.Errorf("mounts[%d]: duplicate name %q", i, m.Name)
+		}
+		seen[m.Name] = true
+		hasSecret := m.Secret != nil && strings.TrimSpace(m.Secret.Name) != ""
+		hasCM := m.ConfigMap != nil && strings.TrimSpace(m.ConfigMap.Name) != ""
+		if hasSecret == hasCM {
+			return nil, nil, fmt.Errorf("mounts[%d] (%s): exactly one of secret or configMap is required", i, m.Name)
+		}
+		volumeName := "mount-" + m.Name
+
+		// readOnly defaults to true. Set to false only when explicit.
+		readOnly := true
+		if m.ReadOnly != nil {
+			readOnly = *m.ReadOnly
+		}
+
+		vol := corev1.Volume{Name: volumeName}
+		vm := corev1.VolumeMount{
+			Name:      volumeName,
+			MountPath: m.MountPath,
+			ReadOnly:  readOnly,
+		}
+
+		switch {
+		case hasSecret:
+			src := &corev1.SecretVolumeSource{
+				SecretName: m.Secret.Name,
+			}
+			if key := strings.TrimSpace(m.Secret.Key); key != "" {
+				// project only this key, name it after the mount target's
+				// basename so subPath has something stable to reference.
+				file := filepath.Base(m.MountPath)
+				src.Items = []corev1.KeyToPath{{Key: key, Path: file}}
+				vm.SubPath = file
+			}
+			vol.VolumeSource = corev1.VolumeSource{Secret: src}
+		case hasCM:
+			src := &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{Name: m.ConfigMap.Name},
+			}
+			if key := strings.TrimSpace(m.ConfigMap.Key); key != "" {
+				file := filepath.Base(m.MountPath)
+				src.Items = []corev1.KeyToPath{{Key: key, Path: file}}
+				vm.SubPath = file
+			}
+			vol.VolumeSource = corev1.VolumeSource{ConfigMap: src}
+		}
+
+		volumes = append(volumes, vol)
+		mounts = append(mounts, vm)
+	}
+	return volumes, mounts, nil
+}
+
+// appendMounts flattens N VolumeMount slices into a single slice while
+// preserving order. Tiny helper to keep the deployment-build call sites
+// readable when the mount source count grows.
+func appendMounts(base []corev1.VolumeMount, extras ...[]corev1.VolumeMount) []corev1.VolumeMount {
+	out := base
+	for _, e := range extras {
+		out = append(out, e...)
+	}
+	return out
+}
+
+// appendVolumes is appendMounts for Volume slices.
+func appendVolumes(base []corev1.Volume, extras ...[]corev1.Volume) []corev1.Volume {
+	out := base
+	for _, e := range extras {
+		out = append(out, e...)
+	}
+	return out
+}
+
 // gitPodPieces returns the Deployment additions needed to clone a repo and
 // authenticate to it. When agent.Spec.Repo is nil, every returned slice is
 // empty and the caller leaves the Deployment unchanged.
@@ -784,6 +885,10 @@ func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.
 	}
 
 	gitInitContainers, gitVolumes, gitMainMounts, gitMainEnv, gitMainEnvFrom := gitPodPieces(agent)
+	mountVolumes, mountMainMounts, mountErr := extraMountPieces(agent)
+	if mountErr != nil {
+		return "", 0, mountErr
+	}
 	envVars = append(envVars, gitMainEnv...)
 
 	for k, v := range agent.Spec.Env {
@@ -860,11 +965,15 @@ func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.
 							ContainerPort: agentPort,
 							Protocol:      corev1.ProtocolTCP,
 						}},
-						VolumeMounts: append([]corev1.VolumeMount{
-							{Name: "workspace", MountPath: "/workspace"},
-							{Name: "config", MountPath: configMount},
-							{Name: "tmp", MountPath: "/tmp"},
-						}, gitMainMounts...),
+						VolumeMounts: appendMounts(
+							[]corev1.VolumeMount{
+								{Name: "workspace", MountPath: "/workspace"},
+								{Name: "config", MountPath: configMount},
+								{Name: "tmp", MountPath: "/tmp"},
+							},
+							gitMainMounts,
+							mountMainMounts,
+						),
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:    resource.MustParse("100m"),
@@ -892,17 +1001,21 @@ func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.
 							PeriodSeconds:       30,
 						},
 					}},
-					Volumes: append([]corev1.Volume{
-						{Name: "workspace", VolumeSource: corev1.VolumeSource{
-							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: pvcName},
-						}},
-						{Name: "config", VolumeSource: corev1.VolumeSource{
-							ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{Name: names.ConfigMap},
-							},
-						}},
-						{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-					}, gitVolumes...),
+					Volumes: appendVolumes(
+						[]corev1.Volume{
+							{Name: "workspace", VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: pvcName},
+							}},
+							{Name: "config", VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{Name: names.ConfigMap},
+								},
+							}},
+							{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+						},
+						gitVolumes,
+						mountVolumes,
+					),
 				},
 			},
 		},

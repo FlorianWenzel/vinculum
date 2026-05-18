@@ -9,6 +9,36 @@ Release artifacts and one-line summaries also live on the
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-05-18
+
+### Added
+- **`Agent.spec.mounts` — generic file/dir mounts from arbitrary
+  Secrets and ConfigMaps.** Each entry produces a Volume + VolumeMount
+  on the main agent container, sourced from a Secret or ConfigMap
+  (exactly one). When the source's `key` is set, only that single key
+  is projected and `mountPath` is treated as a file (volume uses
+  `subPath`); when omitted, every key in the source is materialized
+  under `mountPath` as one file per key. Read-only by default. Use
+  this for kubeconfig (`~/.kube/config`), extra CA bundles, license
+  files, or anything else the agent's shell touches that crush
+  itself doesn't read.
+
+  ```yaml
+  spec:
+    mounts:
+      - name: kubeconfig
+        mountPath: /home/agent/.kube/config
+        secret:
+          name: unimatrix-deploy-kubeconfig
+          key: config
+  ```
+
+- **`kubectl` baked into the vinculum-agent image** (pinned `v1.31.4`,
+  both amd64 + arm64). Pairs with `Agent.spec.mounts` for the kubeconfig:
+  the devops drone can now run `kubectl set image / rollout status /
+  rollout undo` against a target cluster without any extra
+  installation step.
+
 ## [0.6.1] — 2026-05-18
 
 ### Fixed

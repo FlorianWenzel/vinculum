@@ -70,6 +70,57 @@ type AgentSpec struct {
 	// container and main agent container so private repos and git push /
 	// PR creation work. Either, both, or neither field may be set.
 	GitCredentials *GitCredentials `json:"gitCredentials,omitempty"`
+	// Mounts declares extra files/directories to mount into the agent pod
+	// from arbitrary Secrets or ConfigMaps. Use this for anything the
+	// agent's shell touches but crush doesn't itself read — kubeconfig
+	// (`~/.kube/config`), extra CA bundles, ssh-known-hosts, license
+	// files, etc. Each entry produces a Volume + VolumeMount on the main
+	// container; the source must be exactly one of `secret` or `configMap`.
+	// Read-only by default.
+	Mounts []AgentMount `json:"mounts,omitempty"`
+}
+
+// AgentMount mounts a Secret or ConfigMap into the agent pod at an
+// arbitrary path. Exactly one of Secret/ConfigMap must be set.
+//
+// When the source's Key is set, only that single key is projected, and
+// MountPath is treated as a file path (the volume is mounted with
+// subPath so other keys in the source don't appear). When Key is empty,
+// every key in the source is materialized as a file under MountPath.
+type AgentMount struct {
+	// Name is a stable identifier for the mount within this Agent. It
+	// becomes part of the generated k8s Volume name, so it must be a
+	// valid DNS label fragment (lowercase alphanumeric + dashes).
+	Name string `json:"name"`
+	// MountPath is the absolute path inside the agent container where
+	// the source is materialized. A file path when Source.Key is set;
+	// a directory path otherwise.
+	MountPath string `json:"mountPath"`
+	// ReadOnly defaults to true. Set to false explicitly only when the
+	// agent must write back to the mounted file/dir, which is unusual
+	// for Secret/ConfigMap sources.
+	ReadOnly *bool `json:"readOnly,omitempty"`
+	// Secret is the Secret source for this mount.
+	Secret *AgentMountSecretRef `json:"secret,omitempty"`
+	// ConfigMap is the ConfigMap source for this mount.
+	ConfigMap *AgentMountConfigMapRef `json:"configMap,omitempty"`
+}
+
+// AgentMountSecretRef points an AgentMount at a Secret.
+type AgentMountSecretRef struct {
+	// Name of the Secret in the same namespace as the Agent.
+	Name string `json:"name"`
+	// Key, when set, projects only this key into the mount. The volume
+	// is then mounted with subPath so the parent MountPath becomes a
+	// file rather than a directory.
+	Key string `json:"key,omitempty"`
+}
+
+// AgentMountConfigMapRef points an AgentMount at a ConfigMap. Semantics
+// match AgentMountSecretRef.
+type AgentMountConfigMapRef struct {
+	Name string `json:"name"`
+	Key  string `json:"key,omitempty"`
 }
 
 // AgentRepo declares the git repository an Agent works against.
@@ -235,6 +286,24 @@ func (in *AgentSpec) DeepCopyInto(out *AgentSpec) {
 			gc.TokenSecretRef = &SecretRef{Name: in.GitCredentials.TokenSecretRef.Name}
 		}
 		out.GitCredentials = &gc
+	}
+	if in.Mounts != nil {
+		out.Mounts = make([]AgentMount, len(in.Mounts))
+		for i := range in.Mounts {
+			out.Mounts[i] = in.Mounts[i]
+			if in.Mounts[i].ReadOnly != nil {
+				v := *in.Mounts[i].ReadOnly
+				out.Mounts[i].ReadOnly = &v
+			}
+			if in.Mounts[i].Secret != nil {
+				cp := *in.Mounts[i].Secret
+				out.Mounts[i].Secret = &cp
+			}
+			if in.Mounts[i].ConfigMap != nil {
+				cp := *in.Mounts[i].ConfigMap
+				out.Mounts[i].ConfigMap = &cp
+			}
+		}
 	}
 }
 

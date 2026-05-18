@@ -108,6 +108,27 @@ spec:
                         name: {type: string}
                     userName: {type: string}
                     userEmail: {type: string}
+                mounts:
+                  type: array
+                  items:
+                    type: object
+                    required: [name, mountPath]
+                    properties:
+                      name: {type: string}
+                      mountPath: {type: string}
+                      readOnly: {type: boolean}
+                      secret:
+                        type: object
+                        required: [name]
+                        properties:
+                          name: {type: string}
+                          key: {type: string}
+                      configMap:
+                        type: object
+                        required: [name]
+                        properties:
+                          name: {type: string}
+                          key: {type: string}
             status:
               type: object
               properties:

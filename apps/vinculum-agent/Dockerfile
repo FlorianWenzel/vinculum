@@ -27,6 +27,7 @@ FROM debian:bookworm-slim
 ARG TARGETARCH
 ARG CRUSH_VERSION=0.69.1
 ARG GH_VERSION=2.92.0
+ARG KUBECTL_VERSION=1.31.4
 
 ENV DEBIAN_FRONTEND=noninteractive \
     WORK_DIR=/workspace \
@@ -69,6 +70,20 @@ RUN set -eux; \
     rm -rf /tmp/gh_*; \
     chmod +x /usr/local/bin/gh; \
     gh --version
+
+# kubectl — for the devops drone to deploy + roll workloads on the
+# target cluster after merge. Auth comes from a kubeconfig file the
+# operator mounts via Agent.spec.mounts (typically at ~/.kube/config).
+RUN set -eux; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) k_arch=amd64 ;; \
+      arm64) k_arch=arm64 ;; \
+      *) echo "unsupported arch ${TARGETARCH}"; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /usr/local/bin/kubectl \
+      "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${k_arch}/kubectl"; \
+    chmod +x /usr/local/bin/kubectl; \
+    kubectl version --client
 
 RUN useradd -m -u 10001 -s /bin/bash agent
 
