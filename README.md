@@ -426,7 +426,7 @@ Full example: [`.local/webhook-trigger.yaml`](.local/webhook-trigger.yaml).
 
 ```bash
 helm install vinculum oci://ghcr.io/florianwenzel/helm/vinculum \
-  --version 0.6.2 \
+  --version 0.6.3 \
   -n vinculum-system --create-namespace
 ```
 
@@ -444,7 +444,7 @@ brew install FlorianWenzel/vinculum/vnclm
 **Prebuilt binary** (macOS / Linux / Windows — amd64 / arm64):
 
 ```bash
-VERSION=v0.6.2
+VERSION=v0.6.3
 OS=darwin      # linux | darwin | windows
 ARCH=arm64     # amd64 | arm64
 curl -L -o vnclm \

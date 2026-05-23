@@ -9,6 +9,19 @@ Release artifacts and one-line summaries also live on the
 
 ## [Unreleased]
 
+## [0.6.3] — 2026-05-23
+
+### Added
+- **OpenCode Go provider support.** `Agent.spec.model` now accepts
+  `opencode-go/<model-id>` to route through opencode.ai's flatrate
+  Go plan ($12/5h, $30/week, $60/month), with access to DeepSeek V4
+  Pro/Flash, Qwen3.5/3.6 Plus, Kimi K2.5/K2.6, GLM-5/5.1,
+  MiMo-V2.5/Pro, and MiniMax M2.5/M2.7. The operator's
+  `crushProviderConfig` renders an `openai-compat` provider at
+  `https://opencode.ai/zen/go/v1` keyed off `$OPENCODE_API_KEY`.
+  Solves the per-token credit-exhaustion failure mode we hit twice
+  on per-token providers — flatrate caps requests, never overages.
+
 ## [0.6.2] — 2026-05-18
 
 ### Added

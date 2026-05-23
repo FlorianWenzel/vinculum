@@ -573,8 +573,18 @@ func crushProviderConfig(providerID, modelID string) (map[string]any, error) {
 		base["type"] = "azure"
 		base["base_url"] = "$AZURE_OPENAI_ENDPOINT"
 		base["api_key"] = "$AZURE_OPENAI_API_KEY"
+	case "opencode-go":
+		// OpenCode Go — flatrate plan from opencode.ai with a curated
+		// catalog of coding-capable models (DeepSeek V4, Qwen3.x, Kimi
+		// K2.x, GLM-5, MiMo, MiniMax). OpenAI-compatible endpoint at
+		// /v1/chat/completions. Auth: Bearer $OPENCODE_API_KEY.
+		// Docs: https://opencode.ai/docs/go
+		base["name"] = "OpenCode Go"
+		base["type"] = "openai-compat"
+		base["base_url"] = "https://opencode.ai/zen/go/v1"
+		base["api_key"] = "$OPENCODE_API_KEY"
 	default:
-		return nil, fmt.Errorf("unsupported provider %q in agent.spec.model (supported: openrouter, anthropic, openai, azure)", providerID)
+		return nil, fmt.Errorf("unsupported provider %q in agent.spec.model (supported: openrouter, anthropic, openai, azure, opencode-go)", providerID)
 	}
 	return base, nil
 }
