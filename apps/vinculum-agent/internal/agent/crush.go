@@ -20,18 +20,34 @@ import (
 
 const tailBytes = 16 * 1024
 
-// Executor runs crush for each task and mutates State with output + artifacts.
+// Executor runs the configured LLM driver for each task and mutates
+// State with output + artifacts. The runtime-agnostic logic (git
+// pre/post, instruction symlinking, artifact persistence) lives here;
+// the driver handles the CLI invocation.
 type Executor struct {
 	cfg    config.Config
 	logger logger
+	drv    Driver
 }
 
 type logger interface {
 	Printf(format string, v ...any)
 }
 
+// NewExecutor returns an Executor wired to CrushDriver. Preserved for
+// backward compatibility with callers (and tests) that pre-date the
+// Driver abstraction. New code should call NewExecutorWithDriver.
 func NewExecutor(cfg config.Config, l logger) *Executor {
-	return &Executor{cfg: cfg, logger: l}
+	return NewExecutorWithDriver(cfg, l, NewCrushDriver(cfg, l))
+}
+
+// NewExecutorWithDriver returns an Executor that delegates the
+// per-task CLI invocation to the supplied Driver.
+func NewExecutorWithDriver(cfg config.Config, l logger, drv Driver) *Executor {
+	if drv == nil {
+		drv = NewCrushDriver(cfg, l)
+	}
+	return &Executor{cfg: cfg, logger: l, drv: drv}
 }
 
 func (e *Executor) Execute(ctx context.Context, state *tasks.State, workdir string) error {
@@ -74,27 +90,42 @@ func (e *Executor) Execute(ctx context.Context, state *tasks.State, workdir stri
 		}
 		wantContinue = false
 	}
-	stdout, stderr, exitCode, runErr := e.runCrush(ctx, state, runDir, prompt, wantContinue)
 
-	// crush fails hard when --continue is requested but no prior session exists.
-	// Fall back to a fresh run so the first Task on a new Agent doesn't error out.
-	if wantContinue && exitCode != 0 && strings.Contains(stderr, "no sessions found to continue") {
+	e.ensureInstructions(runDir)
+	model := strings.TrimSpace(state.Payload.Spec.Model)
+	if model == "" {
+		model = e.cfg.CrushModel
+	}
+	req := RunRequest{
+		Workdir:      runDir,
+		Prompt:       prompt,
+		Model:        model,
+		WithContinue: wantContinue,
+		Env:          state.Payload.Spec.Env,
+		LogSink:      state.Logs,
+	}
+	res := e.drv.Run(ctx, req)
+
+	// First-ever task on a fresh agent: the driver may refuse to
+	// continue a session that doesn't exist yet. Retry once fresh.
+	if wantContinue && res.ExitCode != 0 && e.drv.ContinueRecoverable(res.Stderr) {
 		if e.logger != nil {
-			e.logger.Printf("crush: no prior session, retrying without --continue")
+			e.logger.Printf("%s: no prior session, retrying without --continue", e.drv.Name())
 		}
-		stdout, stderr, exitCode, runErr = e.runCrush(ctx, state, runDir, prompt, false)
+		req.WithContinue = false
+		res = e.drv.Run(ctx, req)
 	}
 
-	state.StdoutTail = tail(stdout, tailBytes)
-	state.StderrTail = tail(stderr, tailBytes)
-	state.ExitCode = exitCode
-	if runErr != nil && exitCode == -1 {
-		return runErr
+	state.StdoutTail = tail(res.Stdout, tailBytes)
+	state.StderrTail = tail(res.Stderr, tailBytes)
+	state.ExitCode = res.ExitCode
+	if res.Err != nil && res.ExitCode == -1 {
+		return res.Err
 	}
-	if exitCode != 0 {
+	if res.ExitCode != 0 {
 		state.Reason = "NonZeroExit"
-		state.Message = fmt.Sprintf("crush exited %d", exitCode)
-		return fmt.Errorf("crush exited %d", exitCode)
+		state.Message = fmt.Sprintf("%s exited %d", e.drv.Name(), res.ExitCode)
+		return fmt.Errorf("%s exited %d", e.drv.Name(), res.ExitCode)
 	}
 
 	if gitSpec != nil {
@@ -228,53 +259,6 @@ func (e *Executor) ensureInstructions(workdir string) {
 	if err := os.Symlink(src, dst); err != nil {
 		e.logger.Printf("instruction symlink %s -> %s: %v", dst, src, err)
 	}
-}
-
-func (e *Executor) runCrush(ctx context.Context, state *tasks.State, workdir, prompt string, withContinue bool) (string, string, int, error) {
-	e.ensureInstructions(workdir)
-	args := []string{"run"}
-	if e.cfg.CrushQuiet {
-		args = append(args, "--quiet")
-	}
-	if e.cfg.CrushDebug {
-		args = append(args, "--debug")
-	}
-	model := strings.TrimSpace(state.Payload.Spec.Model)
-	if model == "" {
-		model = e.cfg.CrushModel
-	}
-	if model != "" {
-		args = append(args, "--model", model)
-	}
-	if withContinue {
-		args = append(args, "--continue")
-	}
-	args = append(args, prompt)
-
-	cmd := exec.CommandContext(ctx, "crush", args...)
-	cmd.Dir = workdir
-	cmd.Env = mergeEnv(os.Environ(), state.Payload.Spec.Env)
-
-	var stdout, stderr bytes.Buffer
-	if state.Logs != nil {
-		cmd.Stdout = io.MultiWriter(&stdout, state.Logs)
-		cmd.Stderr = io.MultiWriter(&stderr, state.Logs)
-	} else {
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-	}
-
-	err := cmd.Run()
-	exitCode := 0
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			exitCode = exitErr.ExitCode()
-		} else {
-			exitCode = -1
-		}
-	}
-	return stdout.String(), stderr.String(), exitCode, err
 }
 
 func mergeEnv(base []string, overlay map[string]string) []string {

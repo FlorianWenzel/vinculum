@@ -39,6 +39,9 @@ spec:
               properties:
                 image: {type: string}
                 concurrency: {type: integer}
+                runtime:
+                  type: string
+                  enum: [crush, claude-code]
                 model: {type: string}
                 instructionConfigMap: {type: string}
                 instructionInline:

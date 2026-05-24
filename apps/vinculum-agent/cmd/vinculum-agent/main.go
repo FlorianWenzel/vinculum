@@ -40,7 +40,21 @@ func main() {
 		logger.Printf("AGENT_NAMESPACE empty; status patches disabled")
 	}
 
-	executor := agent.NewExecutor(cfg, logger)
+	// Runtime selects which LLM CLI the executor invokes per task.
+	// Default "crush"; set AGENT_RUNTIME=claude-code to drive
+	// Anthropic's claude-code instead. The operator sets this env
+	// from Agent.spec.runtime.
+	var driver agent.Driver
+	switch runtime := os.Getenv("AGENT_RUNTIME"); runtime {
+	case "", "crush":
+		driver = agent.NewCrushDriver(cfg, logger)
+	case "claude-code":
+		driver = agent.NewClaudeDriver(cfg, logger)
+	default:
+		logger.Fatalf("unknown AGENT_RUNTIME=%q (expected one of: crush, claude-code)", runtime)
+	}
+	logger.Printf("runtime=%s", driver.Name())
+	executor := agent.NewExecutorWithDriver(cfg, logger, driver)
 	runner := tasks.NewRunner(cfg, logger, kubeClient, executor)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

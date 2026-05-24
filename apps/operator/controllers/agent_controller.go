@@ -345,11 +345,20 @@ func (r *AgentReconciler) ensureRoleBinding(ctx context.Context, agent *v1alpha1
 
 func (r *AgentReconciler) ensureConfigMap(ctx context.Context, agent *v1alpha1.Agent, names agentNames, resolved []resolvedMCP) (string, error) {
 	data := map[string]string{}
-	crushConfig, err := renderCrushConfig(agent, resolved)
-	if err != nil {
-		return "", err
+	switch agent.EffectiveRuntime() {
+	case v1alpha1.RuntimeClaudeCode:
+		mcpJSON, err := renderClaudeMCPConfig(resolved)
+		if err != nil {
+			return "", err
+		}
+		data["mcp.json"] = mcpJSON
+	default:
+		crushConfig, err := renderCrushConfig(agent, resolved)
+		if err != nil {
+			return "", err
+		}
+		data["crush.json"] = crushConfig
 	}
-	data["crush.json"] = crushConfig
 	if agent.Spec.InstructionInline != nil && agent.Spec.InstructionInline.FileName != "" {
 		data[agent.Spec.InstructionInline.FileName] = agent.Spec.InstructionInline.Content
 	}
@@ -368,7 +377,7 @@ func (r *AgentReconciler) ensureConfigMap(ctx context.Context, agent *v1alpha1.A
 	}
 
 	var existing corev1.ConfigMap
-	err = r.Get(ctx, types.NamespacedName{Name: names.ConfigMap, Namespace: agent.Namespace}, &existing)
+	err := r.Get(ctx, types.NamespacedName{Name: names.ConfigMap, Namespace: agent.Namespace}, &existing)
 	if apierrors.IsNotFound(err) {
 		if err := r.Create(ctx, desired); err != nil {
 			return "", err
@@ -519,6 +528,42 @@ func renderCrushConfig(agent *v1alpha1.Agent, resolved []resolvedMCP) (string, e
 		}
 		cfg["mcp"] = mcp
 	}
+	blob, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(blob), nil
+}
+
+// renderClaudeMCPConfig produces the .mcp.json claude-code reads to
+// discover MCP servers. Schema:
+//
+//	{"mcpServers": {"<name>": {"command": "...", "args": [...], "env": {...}}}}
+//
+// claude-code has no equivalent of crush's provider/model config block —
+// the model is selected per-invocation via --model on the CLI, and the
+// backend (Anthropic API or Max OAuth) is picked from credentials in
+// $HOME/.claude/credentials.json or the ANTHROPIC_API_KEY env. So
+// nothing else from Agent.spec maps into this file.
+func renderClaudeMCPConfig(resolved []resolvedMCP) (string, error) {
+	servers := map[string]any{}
+	for _, s := range resolved {
+		if !s.Enabled || s.Command == "" {
+			// claude-code MCP entries are stdio-only in this format;
+			// HTTP-typed MCPServers would need a different shape and
+			// aren't a use case we have today.
+			continue
+		}
+		entry := map[string]any{"command": s.Command}
+		if len(s.Args) > 0 {
+			entry["args"] = s.Args
+		}
+		if len(s.Env) > 0 {
+			entry["env"] = s.Env
+		}
+		servers[s.Name] = entry
+	}
+	cfg := map[string]any{"mcpServers": servers}
 	blob, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return "", err
@@ -873,6 +918,7 @@ func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.
 	// (and MCP servers like the vinculum stdio bridge get loaded).
 	configMount := instructionMount + "/crush"
 
+	runtime := agent.EffectiveRuntime()
 	envVars := []corev1.EnvVar{
 		{Name: "AGENT_NAME", Value: agent.Name},
 		{Name: "AGENT_NAMESPACE", Value: agent.Namespace},
@@ -881,6 +927,13 @@ func (r *AgentReconciler) ensureDeployment(ctx context.Context, agent *v1alpha1.
 		{Name: "XDG_CONFIG_HOME", Value: instructionMount},
 		{Name: "CRUSH_SOCKET", Value: "/tmp/crush.sock"},
 		{Name: "SERVER_ADDR", Value: fmt.Sprintf(":%d", agentPort)},
+		{Name: "AGENT_RUNTIME", Value: string(runtime)},
+	}
+	if runtime == v1alpha1.RuntimeClaudeCode {
+		// ClaudeDriver passes this path to `claude --mcp-config`. The
+		// file is materialized by ensureConfigMap under the same mount
+		// crush.json would have used.
+		envVars = append(envVars, corev1.EnvVar{Name: "CLAUDE_MCP_CONFIG", Value: configMount + "/mcp.json"})
 	}
 	if agent.Spec.InstructionInline != nil && agent.Spec.InstructionInline.FileName != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: "INSTRUCTION_FILE", Value: configMount + "/" + agent.Spec.InstructionInline.FileName})

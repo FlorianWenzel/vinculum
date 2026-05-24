@@ -28,6 +28,8 @@ ARG TARGETARCH
 ARG CRUSH_VERSION=0.69.1
 ARG GH_VERSION=2.92.0
 ARG KUBECTL_VERSION=1.31.4
+ARG NODE_MAJOR=20
+ARG CLAUDE_CODE_VERSION=2.0.43
 
 ENV DEBIAN_FRONTEND=noninteractive \
     WORK_DIR=/workspace \
@@ -85,6 +87,19 @@ RUN set -eux; \
     chmod +x /usr/local/bin/kubectl; \
     kubectl version --client
 
+# claude-code — Anthropic's CLI, installed via npm. Selected per-agent
+# by setting Agent.spec.runtime=claude-code (the operator wires
+# AGENT_RUNTIME=claude-code into the pod env; vinculum-agent picks
+# ClaudeDriver based on that). Auth: ~/.claude/credentials.json
+# mounted from a Secret via Agent.spec.mounts (Max OAuth) OR the
+# ANTHROPIC_API_KEY env var (pay-per-token API).
+RUN set -eux; \
+    curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -; \
+    apt-get install -y --no-install-recommends nodejs; \
+    rm -rf /var/lib/apt/lists/*; \
+    npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"; \
+    claude --version
+
 RUN useradd -m -u 10001 -s /bin/bash agent
 
 COPY --from=build /out/vinculum-agent /usr/local/bin/vinculum-agent
@@ -95,6 +110,7 @@ RUN mkdir -p /workspace /instructions \
       /home/agent/.config/crush \
       /home/agent/.local/share/crush \
       /home/agent/.cache/crush \
+      /home/agent/.claude \
     && chown -R agent:agent /workspace /instructions /home/agent
 
 USER agent

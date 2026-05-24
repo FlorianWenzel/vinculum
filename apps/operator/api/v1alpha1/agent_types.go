@@ -26,10 +26,27 @@ type InlineMCPServer struct {
 	Enabled   bool              `json:"enabled,omitempty"`
 }
 
+// AgentRuntime selects which LLM-driver CLI the agent pod runs.
+// "crush" (the default) uses charmbracelet/crush configured via
+// crush.json. "claude-code" uses Anthropic's claude-code CLI driven
+// by .mcp.json + AGENTS.md; auth comes from a credentials.json
+// mounted via Spec.Mounts (or ANTHROPIC_API_KEY via env).
+//
+// +kubebuilder:validation:Enum=crush;claude-code
+type AgentRuntime string
+
+const (
+	RuntimeCrush      AgentRuntime = "crush"
+	RuntimeClaudeCode AgentRuntime = "claude-code"
+)
+
 type AgentSpec struct {
-	Image                string      `json:"image"`
-	Concurrency          int32       `json:"concurrency,omitempty"`
-	Model                string      `json:"model,omitempty"`
+	Image       string `json:"image"`
+	Concurrency int32  `json:"concurrency,omitempty"`
+	// Runtime selects the LLM driver inside the agent pod. Default "crush".
+	// See AgentRuntime for valid values.
+	Runtime AgentRuntime `json:"runtime,omitempty"`
+	Model   string       `json:"model,omitempty"`
 	InstructionConfigMap string      `json:"instructionConfigMap,omitempty"`
 	InstructionInline    *InlineFile `json:"instructionInline,omitempty"`
 	InstructionMountPath string      `json:"instructionMountPath,omitempty"`
@@ -222,6 +239,15 @@ func (a *Agent) PeerEnabled() bool {
 		return true
 	}
 	return *a.Spec.Peer
+}
+
+// EffectiveRuntime returns the runtime the agent will use, treating
+// unset as RuntimeCrush.
+func (a *Agent) EffectiveRuntime() AgentRuntime {
+	if a == nil || a.Spec.Runtime == "" {
+		return RuntimeCrush
+	}
+	return a.Spec.Runtime
 }
 
 func (in *AgentSpec) DeepCopyInto(out *AgentSpec) {
